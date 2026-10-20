@@ -17,7 +17,12 @@ LOAN_SOURCE = (2.20, 0.52, 0.86)
 LOAN_TARGET = (-1.70, -0.98, 0.86)
 
 
-STATIONS = {"boxes": (-2.0, -1.50, 0.0), "open_gap": (-0.35, 0.10, 0.0), "return_shelf": (0.15, 0.08, 0.0), "loan_shelf": (1.65, 0.08, 0.0)}
+STATIONS = {
+    "boxes": (-2.0, -1.50, 0.0),
+    "open_gap": (-0.35, 0.10, 0.0),
+    "return_shelf": (0.15, 0.08, 0.0),
+    "loan_shelf": (1.65, 0.08, 0.0),
+}
 ARM_MOUNTS = {"left": (-0.65, -0.10, 0.75), "right": (0.60, -0.20, 0.75)}
 
 
@@ -56,16 +61,18 @@ def create_mobile_dual_scene(sim):
     box("LibraryFloor", (8.0, 6.0, 0.10), (0, -0.5, -0.05), (0.55, 0.48, 0.36))
     box("RearWall", (8.0, 0.08, 2.6), (0, 1.65, 1.3), (0.80, 0.82, 0.76))
     for shelf, offset in (("A", 0.0), ("B", 2.0)):
+
         def shelf_box(name, size, position, color=wood):
             box(f"Shelf{shelf}{name}", size, (position[0] + offset, *position[1:]), color)
 
         shelf_box("Floor", (0.94, 0.36, 0.035), (0, 0.54, SURFACE_Z - 0.0175))
-        shelf_box("BookRearStop", (0.90, 0.01, 0.30 if shelf == "A" else 0.10),
-                  (0, 0.611, 0.90 if shelf == "A" else 0.80))
+        shelf_box(
+            "BookRearStop", (0.90, 0.01, 0.30 if shelf == "A" else 0.10), (0, 0.611, 0.90 if shelf == "A" else 0.80)
+        )
         shelf_box("BookFrontLip", (0.90, 0.01, 0.015), (0, 0.431, 0.7575))
         if shelf == "A":
             # A conventional bookend supports the row after the gripper withdraws.
-            shelf_box("Bookend", (.015,.18,.25), (.065,.52,.875), (.20,.31,.34))
+            shelf_box("Bookend", (0.015, 0.18, 0.25), (0.065, 0.52, 0.875), (0.20, 0.31, 0.34))
         shelf_box("Back", (0.94, 0.025, 2.17), (0, 0.7125, 1.085))
         shelf_box("Upper", (0.94, 0.36, 0.035), (0, 0.54, 2.1675))
         for side in (-1, 1):
@@ -74,10 +81,19 @@ def create_mobile_dual_scene(sim):
         # Fill a separate upper row without obstructing the working volume.
         shelf_box("BackgroundBoard", (0.90, 0.32, 0.025), (0, 0.54, 2.205))
         for index in range(10):
-            shelf_box(f"BackgroundBook{index}", (0.065, 0.16, 0.23), (-0.38 + index * 0.083, 0.54, 2.3325),
-                      ((0.20, 0.34, 0.50), (0.50, 0.23, 0.16), (0.30, 0.43, 0.27))[index % 3])
-        box(f"Shelf{shelf}Marker", (0.18, 0.008, 0.06), (offset, 0.352, 0.67),
-            (0.65, 0.12, 0.09) if shelf == "A" else (0.12, 0.52, 0.26), False)
+            shelf_box(
+                f"BackgroundBook{index}",
+                (0.065, 0.16, 0.23),
+                (-0.38 + index * 0.083, 0.54, 2.3325),
+                ((0.20, 0.34, 0.50), (0.50, 0.23, 0.16), (0.30, 0.43, 0.27))[index % 3],
+            )
+        box(
+            f"Shelf{shelf}Marker",
+            (0.18, 0.008, 0.06),
+            (offset, 0.352, 0.67),
+            (0.65, 0.12, 0.09) if shelf == "A" else (0.12, 0.52, 0.26),
+            False,
+        )
 
     def open_box(name, x, y, color):
         wall = 0.012
@@ -238,13 +254,19 @@ def create_dual_mobile_base(sim):
     for xside in (-1, 1):
         for yside in (-1, 1):
             cfg = sim_utils.CylinderCfg(
-                radius=0.12, height=0.065, axis="X",
+                radius=0.12,
+                height=0.065,
+                axis="X",
                 collision_props=sim_utils.CollisionPropertiesCfg(),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.055, 0.065, 0.075), roughness=0.9),
             )
-            cfg.func(f"{path}/Wheel{xside + 1}_{yside + 1}", cfg,
-                     translation=(xside * 0.82, -0.20 + yside * 0.26, 0.125))
-    return RigidObject(RigidObjectCfg(
-        prim_path=path, spawn=None,
-        init_state=RigidObjectCfg.InitialStateCfg(pos=STATIONS["boxes"]),
-    ))
+            cfg.func(
+                f"{path}/Wheel{xside + 1}_{yside + 1}", cfg, translation=(xside * 0.82, -0.20 + yside * 0.26, 0.125)
+            )
+    return RigidObject(
+        RigidObjectCfg(
+            prim_path=path,
+            spawn=None,
+            init_state=RigidObjectCfg.InitialStateCfg(pos=STATIONS["boxes"]),
+        )
+    )

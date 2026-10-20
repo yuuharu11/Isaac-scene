@@ -190,8 +190,10 @@ def create_room(sim):
     return books
 
 
-def add_book_tongs(stage, ee_path, opening, paddle_length=0.14, collision=False, finger_height=0.052, housing_width=0.23):
-    """Create matching tongs, optionally with colliders for shelf contact."""
+def add_book_tongs(
+    stage, ee_path, opening, paddle_length=0.14, collision=False, finger_height=0.052, housing_width=0.23
+):
+    """Create matching tongs; collision optionally adds fixed pads that do not follow jaw opening."""
     import isaaclab.sim as sim_utils
     from pxr import Gf, UsdGeom
 
@@ -200,7 +202,11 @@ def add_book_tongs(stage, ee_path, opening, paddle_length=0.14, collision=False,
     def part(path, size, position, color, physical=True):
         cfg = sim_utils.CuboidCfg(
             size=size,
-            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=.0005, rest_offset=0) if collision and physical else None,
+            collision_props=(
+                sim_utils.CollisionPropertiesCfg(contact_offset=0.0005, rest_offset=0)
+                if collision and physical
+                else None
+            ),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color, roughness=0.5),
         )
         cfg.func(path, cfg, translation=position)
@@ -213,12 +219,22 @@ def add_book_tongs(stage, ee_path, opening, paddle_length=0.14, collision=False,
         root = UsdGeom.Xform.Define(stage, ee_path + "/" + name)
         op = root.AddTranslateOp()
         op.Set(Gf.Vec3d(side * opening / 2, 0, TCP_OFFSET[2]))
-        part(str(root.GetPath()) + "/Finger", (0.007, paddle_length, finger_height), (0, 0, 0.018), metal, physical=False)
-        part(str(root.GetPath()) + "/Pad", (0.002, paddle_length, 0.016), (-side * 0.004, 0, 0), (0.8, 0.82, 0.78), physical=False)
+        part(
+            str(root.GetPath()) + "/Finger", (0.007, paddle_length, finger_height), (0, 0, 0.018), metal, physical=False
+        )
+        part(
+            str(root.GetPath()) + "/Pad",
+            (0.002, paddle_length, 0.016),
+            (-side * 0.004, 0, 0),
+            (0.8, 0.82, 0.78),
+            physical=False,
+        )
         if collision:
-            contact = sim_utils.CuboidCfg(size=(.007, paddle_length, finger_height),
-                collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=.0005, rest_offset=0))
-            contact.func(ee_path + "/LibraryFixedContact" + name, contact, translation=(side*.085,0,-.182))
+            contact = sim_utils.CuboidCfg(
+                size=(0.007, paddle_length, finger_height),
+                collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.0005, rest_offset=0),
+            )
+            contact.func(ee_path + "/LibraryFixedContact" + name, contact, translation=(side * 0.085, 0, -0.182))
         ops.append(op)
     return ops
 
