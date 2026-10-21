@@ -19,7 +19,7 @@ from isaaclab_arena_examples.bento.capture import _mesh, _vertex_colors, pose_ma
 class GenericCapture:
     """Store robot links and arbitrary rigid objects for offline video rendering."""
 
-    def __init__(self, sim, robot, objects, directory: Path, fps: float):
+    def __init__(self, sim, robot, objects, directory: Path, fps: float, color_reader=None):
         from pxr import Usd, UsdGeom, UsdPhysics
 
         self.robots = list(robot.values()) if isinstance(robot, dict) else [robot]
@@ -97,7 +97,7 @@ class GenericCapture:
                 mesh = _mesh(prim)
             if mesh is None or not len(mesh.faces):
                 continue
-            vertex_colors = _vertex_colors(prim, mesh, material_cache)
+            vertex_colors = (color_reader or _vertex_colors)(prim, mesh, material_cache)
             owner = next((index for index, body in owners if path == body or path.startswith(body + "/")), 0)
             # USD geometry and its owner must share the same authored transform basis.
             # Measured initial poses can differ from USD, especially for driven fingers.

@@ -1,5 +1,9 @@
 # 移動ロボットによる図書館の返却・貸出デモ
 
+開発対象ロボットは **Galbot S1** に切り替えています。
+[S1の導入手順と検証範囲](#galbot-s1今後の図書館用モデル)を参照してください。
+以下の本操作デモは従来のNHC12版で、G1系の導入試験も比較用に保持しています。
+
 4輪台車に載せたYaskawa NHC12アームで、次の順に本を扱います。
 
 1. 返却ボックスからLIB-001を取り出し、本棚へ移動してA-01へ縦に収納する。
@@ -180,3 +184,137 @@ CUDA描画の動画で、RTXカメラ映像ではありません。
 車輪駆動、SLAM、障害物回避は実装していません。
 トングの開閉は表示に反映しますが、接触形状の範囲は固定です。
 対象本の保持には理想的な固定拘束を使うため、摩擦把持の成功を示すものではありません。
+
+
+## Galbot S1（今後の図書館用モデル）
+
+図書館用の開発対象を、脚で昇降するOne Charlieから、支柱で上半身を上下する
+Galbot S1へ切り替えています。以前の `galbot_robot.py`、`galbot_bringup.py`、
+`render_galbot.py` とG1系の検証動画は残してあり、引き続き実行できます。
+S1は `galbot_s1_robot.py`、`galbot_s1_bringup.py`、`render_galbot_s1.py` で分離しています。
+既存NHC12図書館デモをS1の動作実績として扱わないでください。
+
+公式モデル: https://github.com/GalaxyGeneralRobotics/galbot_s1_description
+使用リビジョン: `cb758e557a880c70260c7883207334aed2aa3c65`（Apache-2.0）。
+大きなモデルはGitへ追加せず、既存の `/work/data` に置きます。
+
+```bash
+git clone https://github.com/GalaxyGeneralRobotics/galbot_s1_description.git /work/data/galbot_s1_description
+git -C /work/data/galbot_s1_description checkout cb758e557a880c70260c7883207334aed2aa3c65
+export GALBOT_S1_USD=/work/data/galbot_s1_description/usd/galbot_s1.usda
+```
+
+既に取得済みなら再cloneは不要です。USDの隣にあるpayloadsとTexturesも必要です。
+USDで確認した昇降関節は `torso_lift_joint1`（直動、0–0.735 m）です。
+左右各7軸の腕、4輪の操舵・駆動関節を含みます。
+標準の2本指グリッパーは実行時のオーバーレイで外し、Isaac Sim公式の左右Schunk SVH
+5本指ハンドを固定関節で手首に接続しています。メーカー標準のS1構成ではなく、
+シミュレーション用の組合せです。元の配布USDは変更していません。
+ハンドは左右各9駆動軸と受動連動関節を持ちます。公式の連動拘束を保ち、受動関節を独立駆動しません。
+使用アセットは `Isaac/Robots/Schunk/svh-flat-l/svh-flat-l_v2.usd` と右側の `svh-flat-r` です。
+初回起動時に既存Isaacアセットサーバーへのアクセスが必要です。
+
+左右ハンドに同一の取付回転を使うと、右手の親指が下を向き、指も外側へ閉じてしまいます。
+右手だけ手首軸まわりに180度追加回転し、左右とも親指側が上、掌が内側になるようにしています。
+`verify_s1_hands.py` は記録された姿勢から、親指側の基準点が手首より10 mm以上高く、
+指の閉鎖時の移動が左右とも体の中心へ20 mm以上あることを確認します。
+
+初期姿勢は全関節ゼロの横向き姿勢から、肘を曲げて両手を前に出す姿勢へ変更しました。
+公式URDFの運動学と関節制限で解いた値を `FRONT_ARM_POSE` に保存しています。
+胴体昇降0.25 mのとき、腕第7リンクの目標は基台座標で左右ともX=0.45 m、Y=±0.25 m、Z=0.95 mです。
+
+簡易描画でも公式MDLの `base_color_factor` とUVのベースカラー画像を読み取ります。
+白・青・黒の色を維持しますが、RTXの金属反射や細かな材質効果を再現するものではありません。
+
+既存の非root・ランタイム環境設定を使います。新しいDockerや依存パッケージは不要です。
+
+```bash
+cd /work/.worktrees/galbot-library
+S1_CAPTURE=/tmp/galbot-s1-new
+"$LIBRARY_PYTHON" \
+  -c 'import sys,runpy; sys.path.append("/work/.venv/lib/python3.12/site-packages"); runpy.run_module("isaaclab_arena_examples.library.galbot_s1_bringup",run_name="__main__")' \
+  --device cpu --headless --viz none --output-dir "$S1_CAPTURE"
+"$LIBRARY_PYTHON" \
+  -c 'import sys,runpy; sys.path.append("/work/.venv/lib/python3.12/site-packages"); runpy.run_module("isaaclab_arena_examples.library.render_galbot_s1",run_name="__main__")' \
+  "$S1_CAPTURE" --preview-only
+```
+
+指の向きは次のコマンドで検証できます。旧版の右手が逆向きの記録では失敗します。
+
+```bash
+"$LIBRARY_PYTHON" \
+  -c 'import sys,runpy; sys.path.append("/work/.venv/lib/python3.12/site-packages"); runpy.run_module("isaaclab_arena_examples.library.verify_s1_hands",run_name="__main__")' \
+  "$S1_CAPTURE"
+```
+
+静止画を確認後、最後の `--preview-only` を省くと実時間の動画を生成します。
+試験は台座固定、重力なし、自己衝突なしです。重力ありでは位置誤差は小さい一方、
+関節速度が静止基準を超えたため、本操作への統合は保留しています。自己衝突ありでは初期姿勢の
+指関節が大きく変位し、追従試験に失敗しました。棚・本との接触、車輪走行、
+本の返却・貸出はまだ接続していません。手先位置はグリッパーTCPではなく腕第7リンクで測定します。
+
+五指ハンド・前構え版は2026-10-21に9,600ステップ（40秒、240 Hz）で合格しました。
+昇降、左右の腕、左右の指の閉鎖・開放、初期姿勢への復帰を確認しています。
+全16駆動指関節（左右の指開き軸を除く）の閉鎖から開放までの変位は最小0.27948 radでした。
+駆動関節の目標誤差0.015未満、受動軸も含む全関節速度0.03未満を連続0.5秒以上維持しています。
+これは空中での開閉で、本を摩擦で把持できることは検証していません。
+動画と実測記録: `/work/outputs/library-galbot-s1-hands-corrected-20261021/`。
+
+五指ハンド追加前の2026-10-21の制御ベンチは6,720ステップ（28秒、240 Hz）で合格しました。
+上半身の昇降は0.20000 m、左右の腕第7リンクの変位はそれぞれ約0.07742 mです。
+駆動関節の位置誤差0.015未満、全関節速度0.03未満を連続0.5秒以上維持しました。
+回転関節はrad、昇降関節はmで判定します。受動連動関節は独立位置目標との比較から除外し、
+速度の判定には含めています。これは昇降機構と双腕の制御確認であり、本の把持成功ではありません。
+重力ありの失敗記録も、成功記録とは別に保存します。
+旧構成の成果物: `/work/outputs/library-galbot-s1-20261021/`。
+
+## Galbot導入用ブランチ：昇降・双腕の基礎制御
+
+Galbotへの移行は `yuuharu11/feature/galbot-library` で分離しています。
+既存のNHC12デモ、Arenaの既存Galbot embodiment、ユーザーの他の変更は更新しません。
+作業ディレクトリは `/work/.worktrees/galbot-library` です。
+
+`galbot_robot.py` は、インストール済みの公式 `GALBOT_ONE_CHARLIE_CFG` をコピーします。
+USDは `IsaacLab/Robots/Galbot/galbot_one_charlie/galbot_one_charlie.usd` です。
+最新カタログの `Galbot/galbot_g1/galbot_g1.usda` とは別のモデルです。
+確認したモデルは23関節で、脚部4軸、左右腕各7軸、頭部、左グリッパー、右吸着具を含みます。
+公式の移動台座の形状を使用しますが、このArticulationには車輪駆動関節がありません。
+
+`galbot_bringup.py` は図書館タスクへ接続する前の制御試験です。
+脚部の回転関節1・3を逆向きに動かし、胴体の姿勢を保ちながら下げ、
+左腕・右腕を動かしてから胴体と両腕を元に戻します。胴体には前後方向の変位もあります。
+区間内は5次補間を使い、指令の始端・終端で速度と加速度を0にします。
+これは制御指令の平滑化であり、人の動作の模倣学習ではありません。
+
+このモデルで自己衝突を有効にすると、初期姿勢から脚部が崩れ、目標への追従が妨げられました。
+そのため本試験では台座固定・重力無効・自己衝突無効とし、有限のPDゲインを設定しています。
+外部物体との衝突形状は削除していませんが、本試験には棚や本との接触はありません。
+右手は公式の吸着具のままで、左右同型グリッパー化や把持制御の追加は行っていません。
+本の返却・貸出、移動走行、全身の衝突回避、力に応じた接触制御はまだ未接続です。
+
+既存コンテナ内の非rootユーザーで、前述のランタイム用環境変数を設定して実行します。
+PythonやIsaac Simの再インストール、新しいDockerコンテナは不要です。
+
+```bash
+cd /work/.worktrees/galbot-library
+GALBOT_CAPTURE=/tmp/galbot-control-new
+"$LIBRARY_PYTHON" \
+  -c 'import sys,runpy; sys.path.append("/work/.venv/lib/python3.12/site-packages"); runpy.run_module("isaaclab_arena_examples.library.galbot_bringup",run_name="__main__")' \
+  --device cpu --headless --viz none --output-dir "$GALBOT_CAPTURE"
+
+"$LIBRARY_PYTHON" \
+  -c 'import sys,runpy; sys.path.append("/work/.venv/lib/python3.12/site-packages"); runpy.run_module("isaaclab_arena_examples.library.render_galbot",run_name="__main__")' \
+  "$GALBOT_CAPTURE"
+```
+
+新規・空の保存先を指定してください。`--no-capture` は物理制御の検証のみです。
+描画には既存のCUDA/nvdiffrast環境を使います。RTXカメラ映像ではありません。
+保存先には `result.json`、`scene.npz`、`capture.json`、`galbot-bringup.mp4`、工程別PNGを出力します。
+動画は30Hzの実測姿勢を30fpsで再生する実時間の記録です。
+
+2026-10-21、CPU PhysXで3,360ステップ（28秒）の試験が成功しました。
+胴体高さの差は0.14188 m、左TCPの変位は0.08593 m、右TCPの変位は0.09879 mでした。
+各工程で全関節の目標誤差0.015未満・速度0.03未満を連続0.5秒以上維持しています。
+回転関節はrad、直動のグリッパー関節はmで判定します。
+これはこの姿勢列の動作確認で、機構の全昇降範囲や棚作業の成功を示す試験ではありません。
+成果物は `/work/outputs/library-galbot-bringup-20261021/` に保存しています。
