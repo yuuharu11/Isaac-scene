@@ -72,6 +72,10 @@ See the [documentation overview](https://isaac-sim.github.io/IsaacLab-Arena/rele
 - **Subtask predicates** — Track milestones such as grasp, lift, transport, and place to pinpoint where a policy fails.
 - **Sensitivity analysis** — Perturb environment factors to reveal robustness gaps and generate actionable feedback for targeted policy learning.
 
+## Local Simulation Demos
+
+See the [demo catalog](demos/README.md) for bento, library, robot bring-up, and local video/result management. Generated artifacts are kept outside Git under `outputs/`.
+
 ## Quick Start
 
 ### Prerequisites

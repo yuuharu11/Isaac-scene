@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "demos": [
+    {
+      "id": "library-s1",
+      "title": "図書館：Galbot S1 双腕・五指",
+      "status": "active",
+      "code": "isaaclab_arena_examples/library",
+      "readme": "isaaclab_arena_examples/library/README.md",
+      "simulation": "isaaclab_arena_examples.library.s1_library_task",
+      "renderer": "isaaclab_arena_examples.library.render_s1_library",
+      "video": "s1-library.mp4",
+      "notes": "開発対象。右退避後に赤を挿入。2画面・文字なし。理想把持・指定経路。"
+    },
+    {
+      "id": "bento",
+      "title": "弁当：Yaskawa NHC12",
+      "status": "maintained",
+      "code": "isaaclab_arena_examples/bento",
+      "readme": "isaaclab_arena_examples/bento/README.md",
+      "simulation": "isaaclab_arena_examples.bento.simulation",
+      "renderer": "isaaclab_arena_examples.bento.render_video",
+      "video": "bento.mp4",
+      "notes": "現在のコードはトング版。現存動画は旧吸着版で、現在のコードの映像ではない。"
+    },
+    {
+      "id": "galbot-g1",
+      "title": "Galbot G1系：導入・動作確認",
+      "status": "reference",
+      "code": "isaaclab_arena_examples/library",
+      "readme": "isaaclab_arena_examples/library/HISTORY.md",
+      "simulation": "isaaclab_arena_examples.library.galbot_bringup",
+      "renderer": "isaaclab_arena_examples.library.render_galbot",
+      "video": "galbot-bringup.mp4",
+      "notes": "比較用に保持。図書館の本操作タスクではない。"
+    },
+    {
+      "id": "library-nhc12",
+      "title": "図書館：旧NHC12版",
+      "status": "legacy",
+      "code": "isaaclab_arena_examples/library",
+      "readme": "isaaclab_arena_examples/library/HISTORY.md",
+      "simulation": "isaaclab_arena_examples.library.run_library",
+      "renderer": "isaaclab_arena_examples.library.render_video",
+      "video": "library-mobile.mp4",
+      "notes": "旧実装。現存する動画は未登録。派生の双腕版・混雑棚版は同READMEの履歴を参照。"
+    }
+  ]
+}

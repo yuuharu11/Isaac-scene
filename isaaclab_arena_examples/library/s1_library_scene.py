@@ -6,11 +6,11 @@
 """Build two library shelves and separated return and checkout boxes for Galbot S1."""
 
 BOOK_SIZE = (0.16, 0.035, 0.22)
-STATIONS = {"boxes": (0.12, -2.31, 0.0), "shelf_a": (0.62, 0.0, 0.0), "shelf_b": (0.62, 1.80, 0.0)}
+STATIONS = {"boxes": (0.12, -2.31, 0.0), "shelf_a": (0.42, 0.0, 0.0), "shelf_b": (0.42, 1.80, 0.0)}
 CATALOG = {
-    "return_book": {"id": "LIB-001", "source": (0.85, -2.10, 0.97), "target": (1.35, 0.15, 0.97), "slot": "A-01"},
-    "blocker": {"id": "NBR-001", "source": (1.35, 0.15, 0.97), "target": (1.35, -0.15, 0.97), "slot": "A-02"},
-    "loan_book": {"id": "LIB-003", "source": (1.35, 1.59, 1.23), "target": (0.85, -1.55, 0.97), "slot": "B-03"},
+    "return_book": {"id": "LIB-001", "source": (0.85, -2.10, 0.97), "target": (1.35, 0.0, 0.97), "slot": "A-01"},
+    "blocker": {"id": "NBR-001", "source": (1.35, 0.0, 0.97), "target": (1.35, -0.15, 0.97), "slot": "A-02"},
+    "loan_book": {"id": "LIB-003", "source": (1.35, 1.59, 1.63), "target": (0.85, -1.55, 0.97), "slot": "B-03"},
 }
 
 
@@ -42,20 +42,20 @@ def create_library(sim):
     box("Floor", (5.8, 7.2, 0.10), (0.0, -0.30, -0.09), (0.55, 0.48, 0.38))
     box("RearWall", (0.08, 7.2, 2.6), (2.1, -0.3, 1.3), (0.82, 0.84, 0.79))
     box("SideWall", (3.3, 0.08, 2.6), (0.45, 3.25, 1.3), (0.78, 0.82, 0.83))
-    for letter, cy, surface in (("A", 0.0, 0.86), ("B", 1.80, 1.12)):
+    for letter, cy, surface in (("A", 0.0, 0.86), ("B", 1.80, 1.52)):
         box(f"Shelf{letter}Board", (0.40, 1.0, 0.035), (1.36, cy, surface - 0.0175), wood)
         box(f"Shelf{letter}Back", (0.025, 1.0, 2.1), (1.56, cy, 1.05), wood)
         for side in (-1, 1):
             box(f"Shelf{letter}Side{side+1}", (0.4, 0.025, 2.1), (1.36, cy + side * 0.5, 1.05), wood)
             box(f"Shelf{letter}Bookend{side+1}", (0.19, 0.012, 0.24), (1.35, cy + side * 0.42, surface + 0.12), (0.22, 0.28, 0.30))
-        box(f"Shelf{letter}UpperBoard", (0.4, 1.0, 0.03), (1.36, cy, 1.62), wood)
+        box(f"Shelf{letter}UpperBoard", (0.4, 1.0, 0.03), (1.36, cy, 1.62 if letter == "A" else 0.72), wood)
         box(f"Shelf{letter}Top", (0.4, 1.0, 0.03), (1.36, cy, 2.1), wood)
         box(f"Shelf{letter}Marker", (0.008, 0.20, 0.06), (1.155, cy, surface - 0.09), colors[0 if letter == 'A' else 2], False)
         for i in range(11):
-            box(f"Shelf{letter}UpperBook{i}", (0.16, 0.06, 0.24), (1.35, cy - 0.4 + i * 0.077, 1.755), colors[i % 4])
-        positions = [-0.35, -0.30, -0.25, -0.02, 0.03, 0.08, 0.22, 0.27, 0.32, 0.37] if letter == "A" else [-0.36, -0.30, -0.14, -0.08, -0.02, 0.04, 0.10, 0.16, 0.22, 0.28, 0.34]
+            box(f"Shelf{letter}UpperBook{i}", (0.16, 0.06, 0.24), (1.35, cy - 0.4 + i * 0.077, 1.755 if letter == "A" else 0.855), colors[i % 4])
+        positions = [-0.35, -0.30, -0.25, 0.05, 0.10, 0.15, 0.22, 0.27, 0.32, 0.37] if letter == "A" else [-0.36, -0.30, -0.14, -0.08, -0.02, 0.04, 0.10, 0.16, 0.22, 0.28, 0.34]
         for i, y in enumerate(positions):
-            box(f"Shelf{letter}Neighbor{i}", BOOK_SIZE, (1.35, cy + y, surface + 0.11), colors[i % 4])
+            box(f"Shelf{letter}Neighbor{i}", BOOK_SIZE, (1.35, cy + y, surface + 0.11), ((0.10, 0.50, 0.25) if letter == "A" and y == 0.05 else colors[i % 4]))
 
     for name, cy, color in (("ReturnBox", -2.10, (0.52, 0.28, 0.12)), ("CheckoutBox", -1.55, (0.12, 0.38, 0.46))):
         box(name + "Table", (0.48, 0.42, 0.04), (0.85, cy, 0.84), wood)
@@ -84,4 +84,4 @@ def create_library(sim):
         box("Spine", (0.003, 0.035, 0.22), (-0.0785, 0, 0), color, False, path)
         box("Label", (0.0008, 0.027, 0.035), (-0.0802, 0, -0.045), (0.94, 0.93, 0.85), False, path)
     return books, {"catalog": CATALOG, "stations": STATIONS, "book_size": BOOK_SIZE,
-                   "slot_clear_width_m": 0.105, "shelf_neighbors": "fixed supporting books", "floor_z": -0.04}
+                   "slot_clear_width_m": 0.165, "return_neighbors_y_m": [-0.15, 0.05], "shelf_neighbors": "fixed supporting books", "floor_z": -0.04}

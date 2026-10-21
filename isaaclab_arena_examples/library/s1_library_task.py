@@ -14,6 +14,8 @@ from isaaclab_arena_examples.library.galbot_s1_robot import make_galbot_cfg, smo
 from isaaclab_arena_examples.library.s1_library_scene import CATALOG, STATIONS, create_library
 
 
+BOOK_FROM_WRIST = {"left": (0.35, -0.035, -0.02), "right": (0.35, 0.035, -0.02)}
+
 def parse_args():
     """Parse the standalone library demo options before launching Isaac Sim."""
     from isaaclab.app import AppLauncher
@@ -21,10 +23,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--probe-pick", action="store_true", help="Stop after physically lifting the first book.")
+    parser.add_argument("--probe-shelf", action="store_true", help="Test the shelf-side brown-book shift and gap opening.")
+    parser.add_argument("--probe-high", action="store_true", help="Test high-shelf retrieval through lowering for travel.")
     parser.add_argument("--no-capture", action="store_true")
     parser.add_argument("--capture-fps", type=float, default=15.0)
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+    assert sum((args.probe_pick, args.probe_shelf, args.probe_high)) <= 1, "Select only one probe mode."
     assert args.device == "cpu", "Use --device cpu."
     assert not args.output_dir.exists() or not any(args.output_dir.iterdir()), "Choose a fresh output directory."
     args.headless = True
@@ -32,8 +37,40 @@ def parse_args():
     return args
 
 
-def create_scene():
-    """Return a library containing one S1, collidable furniture and three dynamic task books."""
+def spawn_library_robot(prim_path, cfg, translation=None, orientation=None, **kwargs):
+    """Spawn articulated SVH hands with contact-free fingers for the ideal-grasp task.
+
+    Args:
+        prim_path: Robot root path.
+        cfg: S1 USD spawn configuration.
+        translation: Chassis position.
+        orientation: Chassis quaternion.
+        **kwargs: Forwarded spawner options.
+
+    Returns:
+        The spawned S1 prim; arm and chassis colliders remain enabled.
+    """
+    from pxr import Usd, UsdPhysics
+    from isaaclab_arena_examples.library.galbot_s1_hands import spawn_s1_with_hands
+
+    root = spawn_s1_with_hands(prim_path, cfg, translation, orientation, **kwargs)
+    for side in ("left", "right"):
+        hand = root.GetStage().GetPrimAtPath(f"{prim_path}/{side}_svh")
+        for prim in Usd.PrimRange(hand):
+            if prim.HasAPI(UsdPhysics.CollisionAPI):
+                UsdPhysics.CollisionAPI(prim).GetCollisionEnabledAttr().Set(False)
+    return root
+
+
+def create_scene(station="boxes"):
+    """Create the S1 library before running trajectories.
+
+    Args:
+        station: Initial chassis station.
+
+    Returns:
+        Simulation, robot, target books, holding joints and scene metadata.
+    """
     import torch
     import isaaclab.sim as sim_utils
     from isaaclab.assets import Articulation
@@ -43,7 +80,8 @@ def create_scene():
     light = sim_utils.DomeLightCfg(intensity=2500)
     light.func("/World/Light", light)
     books, metadata = create_library(sim)
-    cfg = make_galbot_cfg(position=STATIONS["boxes"])
+    cfg = make_galbot_cfg(position=STATIONS[station])
+    cfg.spawn.func = spawn_library_robot
     robot = Articulation(cfg)
     joints = {}
     rigid = [p.GetPath() for p in Usd.PrimRange(sim.stage.GetPrimAtPath(cfg.prim_path)) if p.HasAPI(UsdPhysics.RigidBodyAPI)]
@@ -58,6 +96,13 @@ def create_scene():
         # Ideal holding is deliberate: fingers animate, target-book/robot collisions are filtered.
         pairs = UsdPhysics.FilteredPairsAPI.Apply(sim.stage.GetPrimAtPath(books[name].cfg.prim_path))
         pairs.CreateFilteredPairsRel().SetTargets(rigid)
+    # Collision groups cover merged articulation links as well as individual rigid prims.
+    robot_group = UsdPhysics.CollisionGroup.Define(sim.stage, "/World/RobotCollisionGroup")
+    book_group = UsdPhysics.CollisionGroup.Define(sim.stage, "/World/TargetBookCollisionGroup")
+    robot_group.GetCollidersCollectionAPI().CreateIncludesRel().SetTargets([cfg.prim_path])
+    book_group.GetCollidersCollectionAPI().CreateIncludesRel().SetTargets([book.cfg.prim_path for book in books.values()])
+    robot_group.CreateFilteredGroupsRel().SetTargets([book_group.GetPath()])
+    book_group.CreateFilteredGroupsRel().SetTargets([robot_group.GetPath()])
     sim.reset()
     q = robot.data.default_joint_pos.torch.clone()
     robot.write_joint_position_to_sim_index(position=q)
@@ -83,7 +128,7 @@ class LibraryTask:
         self.body_ids = {s: robot.body_names.index(s + "_arm_link7") for s in ("left", "right")}
         self.drive_ids = [i for i, n in enumerate(robot.joint_names) if not n.startswith(("left_hand_", "right_hand_"))]
         self.q = robot.data.joint_pos.torch.clone()
-        self.base = list(STATIONS["boxes"])
+        self.base = robot.data.root_pose_w.torch[0, :3].tolist()
         self.lift = 0.25
         self.events, self.released, self.held = [], set(), {}
         self.distance = 0.0
@@ -96,55 +141,57 @@ class LibraryTask:
         def move(name, side=None, book=None, xyz=None, action=None, base=None, lift=None):
             plan.append(dict(name=name, side=side, book=book, xyz=xyz, action=action, base=base, lift=lift))
         move("settle")
-        move("return_approach", "left", "return_book", (0.70, -2.10, 1.10))
+        move("return_approach", "left", "return_book", (0.78, -2.10, 1.10))
         move("return_reach", "left", "return_book", CATALOG["return_book"]["source"])
         move("grip_return", "left", "return_book", action="grasp")
         move("lift_return", "left", "return_book", (0.85, -2.10, 1.20))
-        move("stow_return", "left", "return_book", (0.77, -2.06, 1.30))
-        move("drive_a_aisle", base=(0.12, 0.0, 0.0))
+        move("stow_return", "left", "return_book", (0.85, -2.06, 1.05))
         move("drive_shelf_a", base=STATIONS["shelf_a"])
         move("catalog_return", action="catalog_return")
-        move("blocker_approach", "right", "blocker", (1.15, 0.15, 1.02))
+        move("blocker_approach", "right", "blocker", (1.15, 0.0, 1.02))
         move("blocker_reach", "right", "blocker", CATALOG["blocker"]["source"])
         move("grip_blocker", "right", "blocker", action="grasp")
-        move("blocker_raise", "right", "blocker", (1.35, 0.15, 1.02))
-        move("blocker_extract", "right", "blocker", (1.10, 0.15, 1.02))
-        move("blocker_park", "right", "blocker", (1.10, -0.32, 1.25), "gap_check")
-        move("return_align", "left", "return_book", (1.15, 0.15, 1.02))
-        move("return_insert", "left", "return_book", (1.35, 0.15, 1.02))
-        move("return_seat", "left", "return_book", (1.35, 0.15, 0.9715))
-        move("release_return", "left", "return_book", action="release")
-        move("return_withdraw", "left", "return_book", (1.12, 0.15, 1.06))
-        move("left_stow", "left", "return_book", (1.27, 0.25, 1.30))
-        move("blocker_align", "right", "blocker", (1.15, -0.15, 1.02))
-        move("blocker_insert", "right", "blocker", (1.35, -0.15, 1.02))
+        move("blocker_raise", "right", "blocker", (1.35, 0.0, 1.02))
+        move("blocker_park", "right", "blocker", (1.35, -0.15, 1.02), "gap_check")
         move("blocker_seat", "right", "blocker", (1.35, -0.15, 0.9715))
         move("release_blocker", "right", "blocker", action="release")
-        move("blocker_withdraw", "right", "blocker", (1.12, -0.15, 1.06))
-        move("right_stow", "right", "blocker", (1.27, -0.25, 1.30))
-        move("exit_a", base=(0.12, 0.0, 0.0))
-        move("drive_b_aisle", base=(0.12, 1.80, 0.0))
+        move("blocker_withdraw", "right", "blocker", (1.08, -0.15, 1.06))
+        move("right_stow", "right", "blocker", (1.08, -0.25, 1.05))
+        move("return_align", "left", "return_book", (1.15, 0.0, 1.02))
+        move("return_insert", "left", "return_book", (1.35, 0.0, 1.02))
+        move("return_seat", "left", "return_book", (1.35, 0.0, 0.9715))
+        move("release_return", "left", "return_book", action="release")
+        move("return_withdraw", "left", "return_book", (1.12, 0.0, 1.06))
+        move("left_stow", "left", "return_book", (1.08, 0.25, 1.05))
         move("drive_shelf_b", base=STATIONS["shelf_b"])
-        move("raise_for_shelf_b", lift=0.45)
+        move("raise_for_shelf_b", lift=0.65)
         move("catalog_loan", action="catalog_loan")
-        move("loan_approach", "right", "loan_book", (1.15, 1.59, 1.28))
+        move("loan_approach", "right", "loan_book", (1.15, 1.59, 1.68))
         move("loan_reach", "right", "loan_book", CATALOG["loan_book"]["source"])
         move("grip_loan", "right", "loan_book", action="grasp")
-        move("loan_raise", "right", "loan_book", (1.35, 1.59, 1.28))
-        move("loan_extract", "right", "loan_book", (1.10, 1.59, 1.28))
-        move("loan_stow", "right", "loan_book", (1.27, 1.55, 1.50))
-        move("exit_b", base=(0.12, 1.80, 0.0))
+        move("loan_raise", "right", "loan_book", (1.35, 1.59, 1.68))
+        move("loan_extract", "right", "loan_book", (1.10, 1.59, 1.68))
+        move("loan_clear_shelf", "right", "loan_book", (1.04, 1.59, 1.68))
+        move("loan_stow", "right", "loan_book", (1.04, 1.55, 1.50))
+        move("left_high_stow", "left", xyz=(1.08, 2.05, 1.45))
+        move("lower_for_travel", lift=0.25)
         move("drive_checkout", base=(0.12, -1.345, 0.0))
-        move("lower_for_checkout", lift=0.25)
         move("checkout_approach", "right", "loan_book", (0.85, -1.55, 1.12))
         move("checkout_seat", "right", "loan_book", (0.85, -1.55, 0.9715))
         move("release_loan", "right", "loan_book", action="release")
-        move("checkout_clear", "right", "loan_book", (0.65, -1.55, 1.15))
+        move("checkout_clear", "right", "loan_book", (0.72, -1.55, 1.15))
         move("done")
         return plan
 
     def prepare(self, phase):
-        """Solve the next bounded arm target and validate it before moving."""
+        """Solve the next bounded arm target before moving.
+
+        Args:
+            phase: One catalog waypoint or control action.
+
+        Returns:
+            Joint targets, segment duration and optional world wrist target.
+        """
         import numpy as np
         import torch
 
@@ -152,8 +199,8 @@ class LibraryTask:
         side, xyz = phase["side"], phase["xyz"]
         expected = None
         if xyz is not None:
-            # Book centre relative to the forward wrist: palm-side pinch with thumb above.
-            offset = np.array([0.28, -0.045 if side == "left" else 0.045, -0.02])
+            # Book centre relative to wrist: spine fingertip grip, palm kept outside the shelf.
+            offset = np.array(BOOK_FROM_WRIST[side])
             wrist = np.array(xyz) - offset
             local = wrist - np.array(self.base)
             seed = self.q[0, self.arm_ids[side]].cpu().numpy()
@@ -185,10 +232,7 @@ class LibraryTask:
         if action == "grasp":
             book = self.books[name].data.root_pose_w.torch
             wrist = self.robot.data.body_link_pose_w.torch[:, self.body_ids[side]]
-            desired = wrist[:, :3].clone()
-            desired[:, 0] += 0.28
-            desired[:, 1] += -0.045 if side == "left" else 0.045
-            desired[:, 2] -= 0.02
+            desired = wrist[:, :3] + wrist.new_tensor([BOOK_FROM_WRIST[side]])
             error = float((desired - book[:, :3]).norm())
             assert error < 0.018, f"Book moved before grasp: {name}, error={error:.4f}"
             body = self.robot.body_names.index(side + "_hand_base_link")
@@ -202,7 +246,7 @@ class LibraryTask:
             joint.CreateLocalRot1Attr(Gf.Quatf(1.0))
             joint.GetJointEnabledAttr().Set(True)
             self.held[side] = name
-            self.events.append(dict(event="grasp", book=name, side=side, position_error_m=error))
+            self.events.append(dict(event="grasp", book=name, side=side, height_m=float(book[0, 2]), position_error_m=error))
         elif action == "release":
             assert self.held.get(side) == name
             self.joints[name].GetJointEnabledAttr().Set(False)
@@ -211,8 +255,9 @@ class LibraryTask:
             self.events.append(dict(event="release", book=name, side=side))
         elif action == "gap_check":
             pos = self.books["blocker"].data.root_pose_w.torch[0, :3].tolist()
-            assert abs(pos[0] - CATALOG["return_book"]["target"][0]) > 0.15, "A-01 remains occupied."
-            self.events.append(dict(event="slot_cleared", slot="A-01", free_width_m=0.105))
+            free_width = 0.05 - pos[1] - 0.035
+            assert free_width > 0.15, "The gap between brown and green is too narrow."
+            self.events.append(dict(event="slot_cleared", slot="A-01", free_width_m=free_width))
         elif action and action.startswith("catalog_"):
             key = "return_book" if action == "catalog_return" else "loan_book"
             self.events.append(dict(event="catalog_match", book=key, catalog_id=CATALOG[key]["id"], slot=CATALOG[key]["slot"]))
@@ -224,14 +269,21 @@ def run(args, app):
     from isaaclab_arena_examples.library.crowded_capture import GenericCapture
     from isaaclab_arena_examples.library.galbot_s1_materials import vertex_colors
 
-    sim, robot, books, joints, metadata = create_scene()
+    sim, robot, books, joints, metadata = create_scene("shelf_b" if args.probe_high else "shelf_a" if args.probe_shelf else "boxes")
     ctrl = LibraryTask(sim, robot, books, joints)
+    if args.probe_shelf:
+        names = ("settle", "blocker_approach", "blocker_reach", "grip_blocker", "blocker_raise", "blocker_park", "blocker_seat", "release_blocker", "blocker_withdraw", "right_stow")
+        ctrl.phases = [p for p in ctrl.phases if p["name"] in names]
+    if args.probe_high:
+        names = ("settle", "raise_for_shelf_b", "catalog_loan", "loan_approach", "loan_reach", "grip_loan", "loan_raise", "loan_extract", "loan_clear_shelf", "loan_stow", "left_high_stow", "lower_for_travel")
+        ctrl.phases = [p for p in ctrl.phases if p["name"] in names]
     capture = None if args.no_capture else GenericCapture(sim, robot, books, args.output_dir, args.capture_fps, color_reader=vertex_colors)
     report = dict(success=False, scene=metadata, events=ctrl.events,
                   scope="S1 library prototype with articulated hands and dynamic target books",
                   limitations=["prescribed kinematic base route; no traction/SLAM/planning",
                                "ideal fixed-joint grasps and robot-target collision filtering; not friction grasping",
                                "robot gravity and self collisions disabled; books retain gravity",
+                               "hand colliders disabled for ideal grasps; robot body and book/furniture collisions retained",
                                "fixed shelf-neighbor books; no perception or fallen-book recovery"])
     dt, step, phase_name = sim.get_physics_dt(), 0, "settle"
     try:
@@ -271,6 +323,8 @@ def run(args, app):
                 assert quiet >= 0.6, f"Tracking failed: {phase_name}, q={error:.4f}, speed={speed:.4f}, wrist={wrist_error:.4f}"
                 ctrl.q = target
                 if phase["base"] is not None:
+                    actual_base = robot.data.root_pose_w.torch[0, :3].tolist()
+                    assert math.dist(actual_base, goal_base) < 0.002, "Chassis failed to reach its station."
                     ctrl.distance += math.dist(start_base, goal_base)
                     ctrl.base = list(goal_base)
                     ctrl.events.append(dict(event="station_arrived", phase=phase_name, base=ctrl.base.copy()))
@@ -278,7 +332,16 @@ def run(args, app):
                     ctrl.lift = phase["lift"]
                 ctrl.action(phase)
                 ctrl.executed.append(dict(phase=phase_name, max_joint_error=error, wrist_error_m=wrist_error,
-                                          quiet_seconds=quiet, base=ctrl.base.copy()))
+                                          quiet_seconds=quiet, base=ctrl.base.copy(),
+                                          lift_position_m=float(robot.data.joint_pos.torch[0, ctrl.names["torso_lift_joint1"]])))
+                if args.probe_high and phase_name == "lower_for_travel":
+                    assert ctrl.held.get("right") == "loan_book"
+                    report.update(success=True, reason="representative_high_probe")
+                    break
+                if args.probe_shelf and phase_name == "right_stow":
+                    assert "blocker" in ctrl.released and "right" not in ctrl.held
+                    report.update(success=True, reason="representative_shelf_probe")
+                    break
                 if args.probe_pick and phase_name == "lift_return":
                     book_z = float(books["return_book"].data.root_pose_w.torch[0, 2])
                     assert book_z > 1.15 and ctrl.held.get("left") == "return_book"
@@ -294,7 +357,9 @@ def run(args, app):
                     checks[name] = error < 0.025 and velocity < 0.10 and upright > math.cos(math.radians(15)) and name in ctrl.released
                 checks["all_released"] = not ctrl.held
                 checks["slot_cleared_before_insertion"] = any(e["event"] == "slot_cleared" for e in ctrl.events)
-                checks["travel_over_7m"] = ctrl.distance > 7.0
+                checks["compact_route"] = 7.0 < ctrl.distance < 7.5
+                checks["neighbor_shifted_right_15cm"] = math.dist(books["blocker"].data.root_pose_w.torch[0, :3].tolist(), CATALOG["blocker"]["target"]) < 0.005
+                checks["high_shelf_retrieval"] = any(e["event"] == "grasp" and e["book"] == "loan_book" and e.get("height_m", 0) > 1.60 for e in ctrl.events)
                 report.update(success=all(checks.values()), reason="complete" if all(checks.values()) else "placement_failed", checks=checks)
     except Exception as exc:
         report["reason"] = f"{type(exc).__name__}: {exc}"
@@ -302,6 +367,9 @@ def run(args, app):
     finally:
         report.update(steps=step, phase=phase_name, distance_m=ctrl.distance, trajectory=ctrl.executed,
                       held=ctrl.held, released=sorted(ctrl.released),
+                      robot_joint_positions=robot.data.joint_pos.torch[0].tolist(),
+                      robot_joint_velocities=robot.data.joint_vel.torch[0].tolist(),
+                      robot_joint_names=robot.joint_names,
                       objects={n: dict(pose_xyzw=o.data.root_pose_w.torch[0].tolist(), velocity=o.data.root_vel_w.torch[0].tolist()) for n, o in books.items()})
         args.output_dir.mkdir(parents=True, exist_ok=True)
         (args.output_dir / "result.json").write_text(json.dumps(report, indent=2) + "\n")

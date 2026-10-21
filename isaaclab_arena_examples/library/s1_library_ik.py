@@ -40,7 +40,16 @@ class S1Kinematics:
         self.goal_rotation = Rotation.from_euler("z", np.pi).as_matrix()
 
     def forward(self, side, values, lift):
-        """Return the wrist transform for seven joint values and a lift height."""
+        """Return the wrist transform for seven joint values and a lift height.
+
+        Args:
+            side: Left or right arm.
+            values: Seven arm joint angles in radians.
+            lift: Torso lift in metres.
+
+        Returns:
+            Wrist transform in the chassis frame.
+        """
         q = dict(zip([f"{side}_arm_joint{i}" for i in range(1, 8)], values)) | {"torso_lift_joint1": lift}
         world = np.eye(4)
         for name, kind, origin, axis in self.chains[side]:
@@ -53,7 +62,17 @@ class S1Kinematics:
         return world
 
     def solve(self, side, position, lift, seed):
-        """Return joint targets and measured FK error for a forward-facing wrist pose."""
+        """Return bounded joint targets for a forward-facing wrist pose.
+
+        Args:
+            side: Left or right arm.
+            position: Wrist XYZ in the chassis frame, in metres.
+            lift: Torso lift in metres.
+            seed: Previous seven arm joint targets.
+
+        Returns:
+            Seven joint targets and their position error in metres.
+        """
         names = [f"{side}_arm_joint{i}" for i in range(1, 8)]
         bounds = np.array([(float(self.by_name[n].find("limit").get("lower")) + 0.01,
                             float(self.by_name[n].find("limit").get("upper")) - 0.01) for n in names]).T
