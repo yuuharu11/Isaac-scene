@@ -207,7 +207,7 @@ class CudaRenderer:
             diffuse = (normal * self.light).sum(-1, keepdim=True).clamp(0, 1)
             visibility = self.visibility(world, position, normal)
             halfway = torch.nn.functional.normalize(view + self.light, dim=-1)
-            specular = (normal * halfway).sum(-1, keepdim=True).clamp(0, 1).pow(32) * 0.12
+            specular = (normal * halfway).sum(-1, keepdim=True).clamp(0, 1).pow(32) * getattr(self, "specular_strength", 0.12)
             sky = 0.38 + 0.08 * normal[..., 2:3].clamp(0, 1)
             shaded = color * (sky + 0.65 * diffuse * visibility) + specular * visibility
             output = torch.where(rast[..., 3:4] > 0, shaded, self.background).contiguous()

@@ -1,6 +1,6 @@
 # Isaac-scene
 
-Isaac Lab-Arena を土台に、Yaskawa NHC12 を使った操作デモを追加している
+Isaac Lab-Arena を土台に、Galbot S1 や Yaskawa NHC12 を使った操作デモを追加している
 開発用リポジトリです。上流（isaac-sim/IsaacLab-Arena）の公式リポジトリでは
 ありません。
 
@@ -21,20 +21,27 @@ Isaac Lab-Arena を土台に、Yaskawa NHC12 を使った操作デモを追加�
 
 ## このリポジトリで追加したもの
 
-上流に、次の独立したサンプルを追加しています。どちらも Arena の環境
+上流に、次の独立したサンプルを追加しています。いずれも Arena の環境
 レジストリには登録しておらず、学習済みポリシーは使いません。
 物理は CPU PhysX、把持は理想的な固定拘束による近似です。
 
 | サンプル | 内容 | 説明 |
 |---|---|---|
+| 図書館（Galbot S1・双腕五指） | 返却本の収納と高い棚からの貸出 | [S1 の README](isaaclab_arena_examples/library/README.md) |
 | 弁当盛り付け | NHC12 単腕が4品目を弁当箱の区画へ移す | [bento の README](isaaclab_arena_examples/bento/README.md) |
-| 図書館（単腕・移動） | 返却本の収納と依頼本の貸出 | [library の README](isaaclab_arena_examples/library/README.md) |
+| 図書館（単腕・移動） | 返却本の収納と依頼本の貸出 | [旧NHC12版の手順](isaaclab_arena_examples/library/HISTORY.md) |
 | 図書館（固定・双腕） | 隣接本を押して隙間を広げる密集棚の試作 | 同上 |
 | 図書館（移動・双腕） | 台車で棚間を移動する双腕の試作 | 同上 |
 
 回帰テストは `isaaclab_arena_examples/tests/` にあります
 （`test_bento_placement.py`、`test_bento_capture.py`、`test_library_placement.py`）。
 配置判定とカタログ整合性のテストはシミュレーションなしで実行できます。
+
+## デモと成果物の管理
+
+[共通カタログ](demos/README.md)にコード・実行手順・動画と結果の保存方法をまとめています。
+生成した一覧は `outputs/README.md`、動画・実測記録・モデルはGit管理外です。
+S1が現在の開発対象で、NHC12版とG1系の導入確認は参照用に保持しています。
 
 ## 実行例
 
