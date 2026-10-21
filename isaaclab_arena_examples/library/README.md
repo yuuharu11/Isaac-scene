@@ -99,3 +99,10 @@ S1_LIBRARY_CAPTURE=/tmp/s1-library-new
 この確認は手指の物理接触や全身の衝突回避を保証するものではありません。
 
 新しい実行の保存・最新版への登録は [管理手順](../../demos/README.md#実行を追加する) に従ってください。
+
+## 旧NHC12版の手順とテスト
+
+単腕移動版・密集棚固定双腕版・移動双腕版の実行方法と検証条件は
+[HISTORY.md](HISTORY.md)を参照してください。既存のモジュールは保持しています。
+配置判定とカタログ整合性の回帰テストは
+`isaaclab_arena_examples/tests/test_library_placement.py` にあります。
