@@ -323,4 +323,4 @@ GALBOT_CAPTURE=/tmp/galbot-control-new
 各工程で全関節の目標誤差0.015未満・速度0.03未満を連続0.5秒以上維持しています。
 回転関節はrad、直動のグリッパー関節はmで判定します。
 これはこの姿勢列の動作確認で、機構の全昇降範囲や棚作業の成功を示す試験ではありません。
-成果物は `/work/outputs/library-galbot-bringup-20261021/` に保存しています。
+成果物は `/work/outputs/demos/galbot-g1/runs/20261021-bringup/` に保存しています。

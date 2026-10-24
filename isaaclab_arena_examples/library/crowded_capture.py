@@ -142,11 +142,19 @@ class GenericCapture:
         assert np.isfinite(result).all(), "Nonfinite measured body pose."
         return result
 
-    def record(self, step: int, phase: str, extra: dict | None = None, force: bool = False) -> None:
+    def record(
+        self,
+        step: int,
+        phase: str,
+        extra: dict | None = None,
+        force: bool = False,
+        *,
+        time_s: float | None = None,
+    ) -> None:
         """Record one measured state and optional diagnostic values at the sampling cadence."""
         if not force and step % self.stride:
             return
-        time = step * self.dt
+        time = step * self.dt if time_s is None else time_s
         if self.times and time == self.times[-1]:
             return
         assert not self.times or time > self.times[-1], "Capture times must increase."

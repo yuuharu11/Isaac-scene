@@ -2,15 +2,42 @@
   "schema_version": 1,
   "demos": [
     {
-      "id": "library-s1",
-      "title": "図書館：Galbot S1 双腕・五指",
+      "id": "library-s1-mobile-spatula",
+      "title": "図書館：Galbot S1 移動・返却・貸出と2枚コテ",
       "status": "active",
       "code": "isaaclab_arena_examples/library",
       "readme": "isaaclab_arena_examples/library/README.md",
+      "simulation": "isaaclab_arena_examples.library.s1_mobile_spatula",
+      "renderer": "isaaclab_arena_examples.library.render_s1_library",
+      "video": "s1-library.mp4",
+      "notes": "7本棚の広い部屋で返却2冊・貸出2冊と傾斜本退避を完了。5冊の物理判定を合格。車輪接触走行、本の固定拘束なし。 [検証と比較](library-review/library-v2/README.md)。",
+      "view_video": "library/video.mp4",
+      "view_run": "20261023-library-v2-4books-r2",
+      "improvement_status": "図書館の改善状況：走行時間を約21%短縮。返却2冊・貸出2冊、7本棚、元のロボット材質を復元。[改善内容と測定](library-review/library-v2/README.md)。"
+    },
+    {
+      "id": "library-s1-return",
+      "title": "図書館：2枚コテの棚前部品検証",
+      "status": "reference",
+      "code": "isaaclab_arena_examples/library",
+      "readme": "isaaclab_arena_examples/library/SHELF_CONTACT_REFERENCE.md",
+      "simulation": "isaaclab_arena_examples.library.s1_spatula_return",
+      "renderer": "isaaclab_arena_examples.library.render_spatula_probe",
+      "video": "s1-library.mp4",
+      "notes": "棚前で傾斜本を退避して返却本を挿入。PhysXの重力・接触・摩擦で保持。本の固定拘束なし。台座固定・自己衝突は無効。比較実験は [2枚コテ](archive/README.md) と [1枚コテ](archive/README.md)。 [整理索引](library-review/experiment-index.md)。 [返却の検証詳細](archive/README.md)。 履歴は圧縮保管済み。復元手順は [アーカイブ一覧](archive/README.md)。",
+      "archive": "archive/shelf-contact-reference.tar.gz"
+    },
+    {
+      "id": "library-s1",
+      "title": "図書館：Galbot S1 双腕・五指",
+      "status": "reference",
+      "code": "isaaclab_arena_examples/library",
+      "readme": "isaaclab_arena_examples/library/SVH_REFERENCE.md",
       "simulation": "isaaclab_arena_examples.library.s1_library_task",
       "renderer": "isaaclab_arena_examples.library.render_s1_library",
       "video": "s1-library.mp4",
-      "notes": "開発対象。右退避後に赤を挿入。2画面・文字なし。理想把持・指定経路。"
+      "notes": "旧全体工程の参考動画。右退避後に赤を挿入。五指の理想把持・台座の指定経路。接触把持版は library-s1-return。 履歴は圧縮保管済み。復元手順は [アーカイブ一覧](archive/README.md)。",
+      "archive": "archive/svh-reference.tar.gz"
     },
     {
       "id": "bento",
@@ -32,7 +59,8 @@
       "simulation": "isaaclab_arena_examples.library.galbot_bringup",
       "renderer": "isaaclab_arena_examples.library.render_galbot",
       "video": "galbot-bringup.mp4",
-      "notes": "比較用に保持。図書館の本操作タスクではない。"
+      "notes": "比較用に保持。図書館の本操作タスクではない。 履歴は圧縮保管済み。復元手順は [アーカイブ一覧](archive/README.md)。",
+      "archive": "archive/galbot-g1-reference.tar.gz"
     },
     {
       "id": "library-nhc12",

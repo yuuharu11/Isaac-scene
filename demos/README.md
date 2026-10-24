@@ -7,12 +7,14 @@
 
 | ID | 用途 | コード・実行手順 |
 | --- | --- | --- |
-| `library-s1` | 開発中の図書館タスク | [S1の手順](../isaaclab_arena_examples/library/README.md#s1による図書館タスク) |
+| `library-s1-mobile-spatula` | 広い部屋での移動・返却・貸出と2枚コテ | [S1の手順](../isaaclab_arena_examples/library/README.md) |
+| `library-s1-return` | 棚前だけの部品検証・参考 | [棚前の参考](../isaaclab_arena_examples/library/SHELF_CONTACT_REFERENCE.md) |
+| `library-s1` | 旧五指・双腕・理想把持の参考 | [旧五指版](../isaaclab_arena_examples/library/SVH_REFERENCE.md) |
 | `bento` | 弁当の盛り付け | [弁当の手順](../isaaclab_arena_examples/bento/README.md) |
 | `galbot-g1` | G1系の導入確認・比較用 | [G1の手順](../isaaclab_arena_examples/library/HISTORY.md#galbot導入用ブランチ昇降双腕の基礎制御) |
 | `library-nhc12` | 旧図書館実装・参照用 | [旧版の手順](../isaaclab_arena_examples/library/HISTORY.md) |
 
-S1の旧動画は削除済みです。弁当で現存する動画は旧吸着版です。
+S1の旧五指版・棚前部品検証は参考として保持しています。弁当で現存する動画は旧吸着版です。
 現在のトング版の映像と混同しないよう、保存実行に注記を付けています。
 既存のコードはモジュールパスを保っています。弁当の `capture.py` と `render_video.py` は
 図書館からも利用する共通処理を含むため、弁当フォルダを丸ごと削除しないでください。
@@ -23,10 +25,10 @@ S1の旧動画は削除済みです。弁当で現存する動画は旧吸着版
 <outputs>/
   README.md                    # 全デモの一覧（自動生成）
   demos/
-    library-s1/
-      latest -> runs/20261022-multiview
+    library-s1-mobile-spatula/
+      latest.json              # 確認済みの実行ID（通常のJSON）
       runs/
-        20261022-multiview/
+        20261022-mobile-spatula-full/
           s1-library.mp4
           result.json          # シミュレーションの成功判定
           capture.json         # 記録条件
@@ -42,7 +44,9 @@ S1の旧動画は削除済みです。弁当で現存する動画は旧吸着版
 この環境では共有成果物ルートを `/work/outputs` にしています。
 管理ツールの既定値は、このチェックアウト内の `outputs/` です。
 ワークツリー利用時は `--outputs /work/outputs` を明示してください。
-過去の動画リンクは互換リンクとして残しますが、新規保存は上の配置にそろえます。
+過去の互換シンボリックリンクは整理し、一覧から実行ID付きの実体パスへ直接リンクします。
+図書館の閲覧用成果物は `outputs/library/` に動画・`images/`・`reports/` を分けています。
+原寸PNGや大きいJSONなどの原記録は `runs/<実行ID>/` に残し、閲覧用フォルダへ展開しません。
 
 ## 一覧・検証
 
@@ -55,7 +59,7 @@ python3 demos/manage.py --outputs /work/outputs check
 python3 demos/manage.py --outputs /work/outputs index
 ```
 
-`check` はコードの参照先と、最新版のリンク・動画・`result.json` の成功値を確認します。
+`check` はコードの参照先と、最新版の選択JSON・動画・`result.json` の成功値を確認します。
 動画の全フレームや物理動作を再検証するコマンドではありません。
 このコンテナで `python3` が使えない場合、既存のPython実体を使います。
 
@@ -71,7 +75,7 @@ python3 demos/manage.py --outputs /work/outputs index
 3. 完成したキャプチャフォルダを次のコマンドで登録する。
 
 ```bash
-python3 demos/manage.py --outputs /work/outputs register library-s1 \
+python3 demos/manage.py --outputs /work/outputs register library-s1-mobile-spatula \
   /tmp/my-library-capture --run 20261022-trial02 \
   --note '変更点・検証内容・残る制限' --promote
 ```
@@ -83,8 +87,8 @@ python3 demos/manage.py --outputs /work/outputs register library-s1 \
 実行に使ったソースは `source_manifest.json` などで別途記録します。
 登録時のコードを過去の実行ソースとみなすことはしません。
 
-古い実行を消すときは、各デモの `latest` が指す実行を残し、不要な `runs/<実行ID>` だけを削除します。
-互換リンクや文書から参照されていないかも確認し、最後に `index` と `check` を実行します。
+古い実行を消すときは、各デモの `latest.json` に記録された実行を残し、不要な `runs/<実行ID>` だけを削除します。
+一覧や文書から参照されていないかも確認し、最後に `index` と `check` を実行します。
 自動削除は行いません。
 
 ## 新しいシミュレーションを追加する
