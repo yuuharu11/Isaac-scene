@@ -194,7 +194,7 @@ def spawn_mobile_robot(prim_path, cfg, translation=None, orientation=None, **kwa
     return root
 
 
-def robot_config(position, cylinder_wheels=False):
+def robot_config(position, cylinder_wheels=False, wheel_speed_limit=1.5):
     """Return a floating S1 with gravity and force-limited wheel actuators."""
     from isaaclab.actuators import ImplicitActuatorCfg
 
@@ -220,7 +220,7 @@ def robot_config(position, cylinder_wheels=False):
         stiffness=0,
         damping=50,
         effort_limit_sim=20,
-        velocity_limit_sim=1.5,
+        velocity_limit_sim=wheel_speed_limit,
     )
     return cfg
 
@@ -228,10 +228,12 @@ def robot_config(position, cylinder_wheels=False):
 class WheelController:
     """Command four steering and driving joints from measured chassis pose."""
 
-    def __init__(self, robot, max_speed=0.09, max_acceleration=0.06):
+    def __init__(self, robot, max_speed=0.09, max_acceleration=0.06, wheel_speed_limit=1.5, arrival_gain=0.8):
         import numpy as np
 
         self.robot = robot
+        self.arrival_gain = arrival_gain
+        self.wheel_speed_limit = wheel_speed_limit
         self.max_speed = max_speed
         self.max_acceleration = max_acceleration
         self.steer = [robot.joint_names.index(f"wheel_steering_joint{i}") for i in range(1, 5)]
@@ -255,7 +257,7 @@ class WheelController:
         robot = self.robot
         pose = robot.data.root_link_pose_w.torch[0].numpy()
         yaw = Rotation.from_quat(pose[3:]).as_euler("xyz")[2]
-        world = 0.8 * (np.asarray(goal)[:2] - pose[:2])
+        world = self.arrival_gain * (np.asarray(goal)[:2] - pose[:2])
         if np.linalg.norm(np.asarray(goal)[:2] - pose[:2]) < 0.003:
             world[:] = 0
         world *= min(1, self.max_speed / max(np.linalg.norm(world), 1e-12))
@@ -283,7 +285,9 @@ class WheelController:
             self.integral[index] = np.clip(self.integral[index] + 1.5 * dt * (desired - measured), -0.5, 0.5)
             if abs(desired) < 0.001:
                 self.integral[index] *= math.exp(-4 * dt)
-            target_v[0, self.drive[index]] = float(np.clip(desired + self.integral[index], -1.5, 1.5))
+            target_v[0, self.drive[index]] = float(
+                np.clip(desired + self.integral[index], -self.wheel_speed_limit, self.wheel_speed_limit)
+            )
         robot.set_joint_position_target_index(target=q)
         robot.set_joint_velocity_target_index(target=target_v)
         robot.write_data_to_sim()
@@ -379,6 +383,8 @@ def prepare_full_phase(robot, tools, books, phase, lift):
         t = tools[side]
         if book_name:
             t["active"] = book_name
+        if phase.get("jaw_opening") is not None and not t["held"]:
+            t["opening"] = phase["jaw_opening"]
         if action == "align":
             t["rotation"] = Rotation.from_quat(pose(books[book_name])[3:])
         if action == "upright":
@@ -395,7 +401,7 @@ def prepare_full_phase(robot, tools, books, phase, lift):
         if action == "close":
             t["opening"] = 0.015
         if action == "open":
-            t["opening"] = 0.025
+            t["opening"] = phase.get("jaw_opening", 0.025)
     for t in tools.values():
         t["end"] = t["goal"].copy()
         t["slerp"] = Slerp([0, 1], Rotation.concatenate([t["start_rotation"], t["rotation"]]))
@@ -462,7 +468,7 @@ def jaw_motion_settled(state, book, action, target_index, dt):
         return bool(min(forces) > 0.05 and stable and at_goal)
     ids = [state["tool"].joint_names.index(name) for name in ("jaw_left", "jaw_right")]
     joints = state["tool"].data.joint_pos.torch[0, ids].numpy()
-    return bool(max(forces) < 0.05 and stable and at_goal and min(abs(joints)) > 0.024)
+    return bool(max(forces) < 0.05 and stable and at_goal and min(abs(joints)) > state["opening"] - 0.001)
 
 
 def record_jaw_settling(phase, elapsed, quiet, closing_duration, events, enabled):

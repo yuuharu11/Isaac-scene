@@ -156,21 +156,52 @@ def legacy_plan():
     return plan
 
 
-def full_plan(batch_books=1):
+def full_plan(batch_books=1, dense_shelves=False, motion_speed=1.0, packed_shelves=False):
     """Return one round trip, carrying one or two books in each direction.
 
     Args:
         batch_books: Number of returned and borrowed books, each.
+        dense_shelves: Reserve the right hand for shorter shelf clearing.
+        motion_speed: Arm trajectory speed multiplier; grasp and release waits stay unchanged.
+        packed_shelves: Clear a uniformly stocked row by physical contact, without a parking slot.
 
     Returns:
         Named phases with motor trajectory, grasp and wheel-navigation goals.
     """
     assert batch_books in (1, 2)
+    assert 1 <= motion_speed <= 2
+    assert not dense_shelves or batch_books == 1, "Reserve the right hand for shelf clearing."
     plan = legacy_plan()
+    for phase in plan:
+        if phase["action"] not in ("close", "open") and phase["name"] not in ("settle", "done", "blocker_align"):
+            phase["duration"] /= motion_speed
+        if dense_shelves and phase["name"] in ("blocker_shift", "blocker_park", "blocker_seat", "blocker_withdraw"):
+            phase["xyz"] = (phase["xyz"][0], -0.09, phase["xyz"][2])
+    if packed_shelves:
+        assert batch_books == 1 and dense_shelves
+        # Slide the right-hand book against the neighboring row, then back off
+        # before release. No empty parking slot is authored in the initial shelf.
+        remove = {"blocker_upright", "blocker_extract"}
+        plan = [p for p in plan if p["name"] not in remove]
+        for p in plan:
+            if p["name"] == "blocker_raise":
+                p["xyz"] = (1.35, 0, 1.00)
+            elif p["name"] == "blocker_shift":
+                p["xyz"] = (1.35, -0.060, 0.972)
+            elif p["name"] in ("blocker_park", "blocker_seat"):
+                p["xyz"] = (1.35, -0.042, 0.972)
+            elif p["name"] == "blocker_withdraw":
+                p["xyz"] = (1.15, -0.042, 0.972)
+            p["jaw_opening"] = 0.021
+        index = next(i for i, p in enumerate(plan) if p["name"] == "blocker_shift")
+        seat = dict(plan[index], name="blocker_slide_start", xyz=(1.35, 0, 0.972))
+        plan.insert(index, seat)
     if batch_books == 1:
         return plan
 
     def phase(name, duration=4, side=None, book=None, xyz=None, action=None):
+        if action not in ("close", "open"):
+            duration /= motion_speed
         return dict(name=name, duration=duration, side=side, book=book, xyz=xyz, action=action, base=None, lift=None)
 
     def after(name, phases):

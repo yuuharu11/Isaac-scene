@@ -37,8 +37,20 @@ def parse_args():
     parser.add_argument("--probe-drive", action="store_true")
     parser.add_argument("--batch-books", type=int, choices=(1, 2), default=1)
     parser.add_argument("--expanded-room", action="store_true")
+    parser.add_argument("--dense-shelves", action="store_true")
+    parser.add_argument(
+        "--packed-shelves", action="store_true", help="Uniform task-row pitch; clear space through contact."
+    )
+    parser.add_argument("--motion-speed", type=float, default=1, help="Arm trajectory speed multiplier (1–2).")
+    parser.add_argument(
+        "--wheel-speed-limit",
+        type=float,
+        default=1.5,
+        help="Simulated wheel rad/s limit; above 1.5 is an uncalibrated faster-drive scenario.",
+    )
     parser.add_argument("--travel-speed", type=float, default=0.09)
     parser.add_argument("--travel-acceleration", type=float, default=0.06)
+    parser.add_argument("--arrival-gain", type=float, default=0.8, help="Position feedback gain for wheel navigation.")
     parser.add_argument("--jaw-force", type=float, default=4, help="Per-jaw actuator force limit in newtons.")
     parser.add_argument("--loan-jaw-force", type=float, help="Optional lower per-jaw limit for borrowed books.")
     parser.add_argument("--max-jaw-wait", type=float, default=6, help="Bounded adaptive jaw wait in seconds.")
@@ -79,8 +91,15 @@ def parse_args():
     parser.set_defaults(friction=0.5)
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
-    assert 0 < args.travel_speed <= 1.5 * 0.08272846
-    assert 0 < args.travel_acceleration <= 0.1
+    if args.packed_shelves:
+        args.dense_shelves = True
+        assert abs(args.blocker_angle) < 1e-9, "Packed shelves require --blocker-angle 0."
+    assert 1.5 <= args.wheel_speed_limit <= 6
+    assert 0 < args.travel_speed <= args.wheel_speed_limit * 0.08272846
+    assert 0 < args.travel_acceleration <= 0.25
+    assert 0.8 <= args.arrival_gain <= 1.5
+    assert 1 <= args.motion_speed <= 2
+    assert not args.dense_shelves or args.batch_books == 1
     assert 0 < args.jaw_force <= 4
     assert args.loan_jaw_force is None or 0 < args.loan_jaw_force <= args.jaw_force
     assert 2 <= args.max_jaw_wait <= 10
@@ -116,14 +135,16 @@ def drive_probe(args):
         )
     )
     books, _ = create_library(sim)
-    robot = Articulation(robot_config((-0.18, -2.31, 0), args.cylinder_wheels))
+    robot = Articulation(robot_config((-0.18, -2.31, 0), args.cylinder_wheels, args.wheel_speed_limit))
     sim.reset()
     q = robot.data.default_joint_pos.torch.clone()
     robot.write_joint_position_to_sim_index(position=q)
     robot.set_joint_position_target_index(target=q)
     sim.forward()
     robot.update(args.dt)
-    wheels = WheelController(robot, args.travel_speed, args.travel_acceleration)
+    wheels = WheelController(
+        robot, args.travel_speed, args.travel_acceleration, args.wheel_speed_limit, args.arrival_gain
+    )
     capture = GenericCapture(sim, robot, books, args.output_dir, 10)
     subscription, clock, contacts = contact_diagnostics(args.dt, include_robot=True)
     step = 0
@@ -198,6 +219,8 @@ def create_full_scene(args):
         blocker_angle=args.blocker_angle,
         batch_books=args.batch_books,
         expanded_room=args.expanded_room,
+        dense_shelves=args.dense_shelves,
+        packed_shelves=args.packed_shelves,
     )
     base = np.array([0.30, 0, 0]) if args.probe_shelf else np.array([-0.18, -2.31, 0])
     if args.probe_high:
@@ -205,7 +228,7 @@ def create_full_scene(args):
     ik = S1Kinematics()
     base[2] = grounded_base_height(ik, metadata["floor_z"]) if args.cylinder_wheels else base[2]
     initial_lift = 0.65 if args.probe_high else 0.25
-    cfg = robot_config(base, args.cylinder_wheels)
+    cfg = robot_config(base, args.cylinder_wheels, args.wheel_speed_limit)
     cfg.init_state.joint_pos["torso_lift_joint1"] = initial_lift
     import re
 
@@ -341,7 +364,9 @@ def run_full(args):
     metadata["contact_materials"] = read_contact_materials(sim.stage)
     snapshot_sources(args)
     target_names = list(metadata["catalog"])
-    wheels = WheelController(robot, args.travel_speed, args.travel_acceleration)
+    wheels = WheelController(
+        robot, args.travel_speed, args.travel_acceleration, args.wheel_speed_limit, args.arrival_gain
+    )
     capture = GenericCapture(
         sim,
         dict(S1=robot, **{s: t["tool"] for s, t in tools.items()}),
@@ -354,7 +379,7 @@ def run_full(args):
     motion_audit = LibraryMotionAudit(books, tools, metadata["catalog"], args.dt, args.diagnostic_phase)
     args.output_dir.mkdir(exist_ok=True, parents=True)
     (args.output_dir / "simulation_source.py").write_text(Path(__file__).read_text())
-    expected_plan = full_plan(args.batch_books)
+    expected_plan = full_plan(args.batch_books, args.dense_shelves, args.motion_speed, args.packed_shelves)
     phases = expected_plan.copy()
     if args.probe_shelf:
         names = [p["name"] for p in phases]
@@ -552,7 +577,10 @@ def run_full(args):
         batch_books=args.batch_books,
         expected_plan=expected_plan,
         travel_speed_m_s=args.travel_speed,
+        wheel_speed_limit_rad_s=args.wheel_speed_limit,
+        motion_speed_multiplier=args.motion_speed,
         travel_acceleration_m_s2=args.travel_acceleration,
+        arrival_gain=args.arrival_gain,
         jaw_close_duration_s=args.jaw_close_duration,
         blocker_close_duration_s=args.blocker_close_duration,
         arm_control_diagnostics={side: tool.get("control_diagnostics", {}) for side, tool in tools.items()},
@@ -585,6 +613,10 @@ def run_full(args):
         limitations=[
             "S1 self-collisions disabled due existing collision-mesh overlaps.",
             "Uncalibrated motors, friction and tool masses; rigid books and blades.",
+            (
+                f"Driving-wheel limit {args.wheel_speed_limit:g} rad/s; original profile is 1.5 rad/s. Higher limits"
+                " are simulated assumptions, not measured hardware capability."
+            ),
         ],
     )
     (args.output_dir / "motion_audit.json").write_text(json.dumps(report["motion_audit"], indent=2) + "\n")

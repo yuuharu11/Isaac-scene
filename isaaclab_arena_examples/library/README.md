@@ -1,5 +1,46 @@
 # 図書館デモ：Galbot S1・移動双腕2枚コテ
 
+## 最新版v4：等間隔の密な棚・取り出す本だけ白タグ
+
+[動画・代表画像・測定](/work/outputs/library/README.md) ／ [再現条件](/work/outputs/library-review/library-v4/REPRODUCE.md)
+
+棒状のブックエンドと青・緑の棚目印を除去し、白タグは取り出す貸出本1冊だけにしました。
+返却・貸出段は初期各21冊、対象の両隣を含め同じ7 mm間隔です。返却位置は最初は本で埋まっており、右手で本の列を押し寄せて空け、左手で1冊返却します。貸出も1冊です。
+
+全43工程・118.35秒を検証し、前回の163.10秒から27.4%短縮。
+同じ7走行区間は76.60→48.10秒でした。速度・棚密度・隙間の作り方を同時に変更しています。
+
+`--packed-shelves --blocker-angle 0 --motion-speed 1.8 --wheel-speed-limit 6 --travel-speed 0.40 --travel-acceleration 0.25 --arrival-gain 1.2 --jaw-force 4 --loan-jaw-force 4` を使用します。全オプションと起動方法は再現条件を参照してください。
+
+厚さ3 mmの刃に対して、接近・開放の片側開口21 mmを使用します。押す予定の列は移動方向・量・回転・着座・静止を検証し、その他の本の変位上限5 mmは維持します。開放は接触力0.05 N未満、開口の指令幅に対する到達、従来どおりの速度・静定時間で確認します。
+貸出本は高速な後退時に傾いた3 N条件の失敗記録を残し、返却本と同じ4 Nで輸送・下降と全工程を再検証しました。
+高速駆動系はシミュレーション上の仮定です。本体の自己衝突は既存設定で無効、摩擦・モーターは未校正、本・刃は剛体です。
+
+## 前回版v3：左手で1冊返却・右手で隙間確保
+
+[最新動画・画像・測定結果](/work/outputs/library/README.md) ／ [再現手順](/work/outputs/library-review/library-v3/REPRODUCE.md)
+
+返却本を左手で1冊運び、右手で傾いた隣本を起こして9 cm横へ移して空きを作り、左手で返却します。貸出も1冊です。
+作業段は通常の本間隔6 mm、隣本21→31冊。7本棚に窓・閲覧テーブル・通路ラグを加え、全景カメラを低くしました。
+全44工程・物理時間163.10秒・実走9.24 m、3冊すべての物理判定に合格。同じ7走行区間は公開中だったR2の115.75秒から76.60秒へ33.8%短縮しました。作業量も各2冊→各1冊に変わるため、全体時間の差は速度だけの効果ではありません。
+
+```bash
+python -m isaaclab_arena_examples.library.s1_mobile_spatula \
+  --device cpu --viz none --output-dir NEW_EMPTY_DIRECTORY \
+  --batch-books 1 --expanded-room --dense-shelves --cylinder-wheels \
+  --motion-speed 1.4 --wheel-speed-limit 4 \
+  --travel-speed 0.28 --travel-acceleration 0.18 \
+  --arm-control-period 0.016666666666666666 \
+  --adaptive-grasp-wait --jaw-close-duration 1 --max-jaw-wait 6 \
+  --jaw-force 4 --loan-jaw-force 3
+```
+
+`--motion-speed` は腕と昇降の軌道時間を短縮し、把持・開放の静定待機を維持します。`--dense-shelves` は `--batch-books 1` 専用です。
+駆動輪上限4 rad/sは元の1.5 rad/sを上回る高速駆動系を想定したシミュレーション条件で、実機の確認済み能力ではありません。把持力・車輪トルク上限と評価閾値は維持します。本体の自己衝突は既存設定で無効、摩擦やモーターは未校正です。
+実行環境は通常リポジトリのDocker手順を使い、今回の既存非root環境の例外承認と起動ラッパーは再現手順に記録しています。
+
+## 従来版R2の記録
+
 > 返却2冊・貸出2冊のR2全工程を検証済み。測定結果と比較は [改善記録](/work/outputs/library-review/library-v2/README.md) に保存しています。
 
 広い部屋、返却ボックス、書架、貸出ボックスで、左右の手首に付けた可変幅の2枚コテを使います。
@@ -11,7 +52,7 @@
 [公開中の全体動画](/work/outputs/library/video.mp4) と
 [従来版の検証・試行の整理](/work/outputs/demos/library-s1-mobile-spatula/runs/20261022-mobile-spatula-full/README.md) を保持します。
 従来版は全44工程・実走9.29 m、3冊の保持・着座・開放・抜去を検証した記録です。
-最新版は全66工程のR2です。実行先は
+従来の2冊ずつの版は全66工程のR2です。実行先は
 [20261023-library-v2-4books-r2](/work/outputs/demos/library-s1-mobile-spatula/runs/20261023-library-v2-4books-r2/) です。
 **R2は全工程を完了し、評価対象5冊すべてが既存基準を合格しました。**
 棚前だけの検証や途中停止のprobeは参考枠とし、全体工程の成功とは分けます。
