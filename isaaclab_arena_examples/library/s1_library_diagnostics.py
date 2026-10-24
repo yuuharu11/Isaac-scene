@@ -274,7 +274,15 @@ class LibraryMotionAudit:
             sampling_dt_s=float(self.dt),
             samples=self.samples,
             max_neighbor_displacement_m=self.max_neighbor_displacement_m,
-            neighbors=copy.deepcopy(self.neighbors),
+            neighbors={
+                name: dict(
+                    entry,
+                    initial_pose=self.initial[name].tolist(),
+                    final_pose=self._pose(self.books[name]).tolist(),
+                    final_velocity=self.books[name].data.root_com_vel_w.torch[0].tolist(),
+                )
+                for name, entry in self.neighbors.items()
+            },
             books=targets,
             forces=copy.deepcopy(self.force_stats),
             force_by_phase=copy.deepcopy(self.force_by_phase),

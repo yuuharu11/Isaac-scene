@@ -37,14 +37,6 @@ def add_library_atmosphere(box):
             name = f"{prefix}Book{j}"
             color = palette[(j + len(prefix)) % len(palette)]
             box(name, (0.17, width, height), (x, y, z), color)
-            if j % 3 == 0:
-                box(
-                    name + "Label",
-                    (0.001, width * 0.7, 0.025),
-                    (x + facing * 0.0857, y, z - height * 0.24),
-                    (0.82, 0.80, 0.70),
-                    False,
-                )
             count += 1
 
     cases = [(-2.55, y, 1) for y in (-2.65, -1.20, 0.25, 1.70)] + [(1.36, -2.85, -1)]
@@ -62,7 +54,27 @@ def add_library_atmosphere(box):
             prefix = f"Shelf{letter}ExtraRow{index}"
             box(prefix + "Board", (0.40, 1.0, 0.025), (1.36, cy, surface - 0.0125), wood)
             row(prefix, 1.35, cy, surface, 18)
+    # Quiet reading corner, windows and an aisle runner make room scale legible.
+    box("AisleRunner", (1.55, 5.1, 0.002), (-0.95, -0.25, -0.038), (0.23, 0.35, 0.36), False)
+    for side in (-1, 1):
+        box(
+            f"RunnerBorder{side+1}",
+            (0.022, 5.1, 0.003),
+            (-0.95 + side * 0.74, -0.25, -0.037),
+            (0.66, 0.62, 0.47),
+            False,
+        )
+    box("ReadingTable", (0.90, 0.55, 0.05), (-1.45, 2.65, 0.73), wood)
+    for ix, x in enumerate((-1.80, -1.10)):
+        for iy, y in enumerate((2.45, 2.85)):
+            box(f"ReadingLeg{ix}{iy}", (0.045, 0.045, 0.72), (x, y, 0.32), (0.26, 0.27, 0.25))
+    for i, x in enumerate((-1.4, -0.15, 1.1)):
+        box(f"WindowFrame{i}", (0.97, 0.025, 0.98), (x, 3.195, 1.66), wood, False)
+        box(f"WindowGlass{i}", (0.89, 0.012, 0.90), (x, 3.176, 1.66), (0.65, 0.79, 0.82), False)
+        box(f"WindowMullion{i}", (0.025, 0.015, 0.90), (x, 3.166, 1.66), (0.85, 0.84, 0.77), False)
     return dict(
+        reading_corner=True,
+        aisle_runner=True,
         shelves=7,
         added_shelves=len(cases),
         added_static_books=count,

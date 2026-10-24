@@ -58,7 +58,7 @@ def main():
     import numpy as np
 
     import imageio_ffmpeg
-    from PIL import Image
+    from PIL import Image, ImageDraw, ImageFont
 
     from isaaclab_arena_examples.library.render_video import LibraryRenderer
 
@@ -92,6 +92,10 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     expanded_room = report.get("scene", {}).get("room", {}).get("shelves", 2) > 2
     width, height = 1920, 720
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 20)
+    except OSError:
+        font = ImageFont.load_default()
     with np.load(directory / "scene.npz", allow_pickle=False) as scene:
         measured_poses = scene["poses"]
         measured_phases = scene["phases"]
@@ -105,9 +109,9 @@ def main():
         def frame(index):
             poses = measured_poses[index]
             # Fixed overview and a synchronized virtual camera near the head.
-            renderer.camera_eye = [-0.8, -5.8, 4.6] if expanded_room else [-3.6, -4.8, 3.2]
-            renderer.camera_target = [-0.4, -0.1, 1.0] if expanded_room else [0.85, -0.15, 1.05]
-            renderer.fov = 68.0 if expanded_room else 57.0
+            renderer.camera_eye = [-0.85, -5.5, 2.85] if expanded_room else [-3.6, -4.8, 3.2]
+            renderer.camera_target = [-0.45, 0.0, 1.0] if expanded_room else [0.85, -0.15, 1.05]
+            renderer.fov = 67.0 if expanded_room else 57.0
             renderer.set_camera()
             overview = renderer.render(poses)
             renderer.camera_eye = eyes[index].tolist()
@@ -117,7 +121,42 @@ def main():
             robot_view = renderer.render(poses)
             canvas = np.concatenate((overview, robot_view), axis=1)
             canvas[:, width // 2 - 2 : width // 2 + 2] = (28, 32, 36)
-            return canvas
+            image = Image.fromarray(canvas)
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((0, 0, width, 38), fill=(24, 36, 40))
+            draw.text(
+                (18, 6),
+                "LIBRARY / SINGLE BOOK" if report.get("batch_books", 1) == 1 else "LIBRARY / TWO BOOKS",
+                font=font,
+                fill=(235, 237, 228),
+            )
+            phase = str(measured_phases[index])
+            returning = (
+                "loan" not in phase
+                and "checkout" not in phase
+                and "shelf_b" not in phase
+                and phase != "lower_for_travel"
+                and phase != "done"
+            )
+            role = (
+                (
+                    "LEFT: RETURN BOOK  /  RIGHT: CLEAR SHELF"
+                    if report.get("batch_books", 1) == 1
+                    else "TWO-BOOK RETURN / SHELF CLEARING"
+                )
+                if returning
+                else ("SINGLE-BOOK LOAN" if report.get("batch_books", 1) == 1 else "TWO-BOOK LOAN")
+            )
+            draw.text((width // 2 + 18, 6), role, font=font, fill=(235, 237, 228))
+            draw.rectangle((0, height - 34, width, height), fill=(24, 36, 40))
+            draw.text((18, height - 29), phase.replace("_", " ").upper(), font=font, fill=(235, 237, 228))
+            draw.text(
+                (width // 2 + 18, height - 29),
+                f"Physics {float(scene['times'][index]):.1f}s / playback {args.speedup:g}x",
+                font=font,
+                fill=(235, 237, 228),
+            )
+            return np.asarray(image)
 
         selected = (
             "settle",
@@ -176,7 +215,7 @@ def main():
             renderer="USD geometry and measured CPU PhysX poses; CUDA rasterization",
             lighting="diffuse, broad material reflections and local screen-space ambient occlusion; no shadow maps",
             views=["fixed overview", "virtual camera near robot head; task-directed aim"],
-            labels=False,
+            labels=True,
             camera=args.camera,
             source=str(directory),
             physical_interval_s=[

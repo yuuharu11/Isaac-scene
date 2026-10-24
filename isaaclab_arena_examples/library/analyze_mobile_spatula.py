@@ -193,6 +193,37 @@ def analyze(directory, finalize=False):
     tool_contacts = [c for c in contacts.values() if any("/Tool" in actor for actor in c["actors"])]
     penetration = float(max((c["max_penetration_m"] for c in tool_contacts), default=float("inf")))
     neighbors = float(audit["max_neighbor_displacement_m"] if audit else report["max_neighbor_displacement_m"])
+    clearance_checks = {}
+    all_neighbors_displacement = neighbors
+    planned = set(report["scene"].get("clearance_neighbors", []))
+    if planned:
+        assert audit, "Packed row clearing requires the continuous neighbor audit."
+        neighbors = max(
+            (entry["max_displacement_m"] for name, entry in audit["neighbors"].items() if name not in planned),
+            default=0.0,
+        )
+        for name in sorted(planned):
+            entry = audit["neighbors"][name]
+            initial, final_pose = np.asarray(entry["initial_pose"]), np.asarray(entry["final_pose"])
+            velocity = np.asarray(entry["final_velocity"])
+            delta = final_pose[:3] - initial[:3]
+            support_error = abs(bottom(final_pose) - 0.86)
+            success = bool(
+                entry["max_displacement_m"] < report["scene"]["clearance_neighbor_motion_limit_m"]
+                and entry["max_rotation_deg"] < report["scene"]["clearance_neighbor_rotation_limit_deg"]
+                and abs(delta[0]) < 0.005
+                and -0.070 < delta[1] < 0.005
+                and support_error < 0.005
+                and np.linalg.norm(velocity[:3]) < 0.03
+                and np.linalg.norm(velocity[3:]) < 0.1
+            )
+            clearance_checks[name] = dict(
+                success=success,
+                displacement_m=delta.tolist(),
+                support_error_m=support_error,
+                max_displacement_m=entry["max_displacement_m"],
+                max_rotation_deg=entry["max_rotation_deg"],
+            )
     high_grasp_by_book = {
         name: bool(
             entry.get("grasp_phase") in rows
@@ -219,8 +250,9 @@ def analyze(directory, finalize=False):
         and distance > 8
         and penetration < 0.0005
         and neighbors < 0.005
+        and all(entry["success"] for entry in clearance_checks.values())
         and high_grasp
-        and (report.get("batch_books", 1) != 2 or not unintended)
+        and not unintended
     )
     result = dict(
         success=success,
@@ -230,6 +262,9 @@ def analyze(directory, finalize=False):
         navigation_settled=navigation_ok,
         measured_base_path_m=distance,
         max_working_neighbor_displacement_m=neighbors,
+        max_all_neighbor_displacement_m=all_neighbors_displacement,
+        planned_clearance_neighbors=clearance_checks,
+        unexpected_tool_contacts=unintended,
         max_reported_tool_penetration_m=penetration,
         high_shelf_grasp=high_grasp,
         physics="PhysX",
@@ -242,6 +277,9 @@ def analyze(directory, finalize=False):
             max_book_slip_m=0.01,
             min_bilateral_contact_fraction=0.8,
             max_neighbor_displacement_m=0.005,
+            max_unplanned_neighbor_displacement_m=0.005,
+            planned_clearance_neighbor_motion_limit_m=report["scene"].get("clearance_neighbor_motion_limit_m"),
+            planned_clearance_neighbor_rotation_limit_deg=report["scene"].get("clearance_neighbor_rotation_limit_deg"),
             max_reported_tool_penetration_m=0.0005,
             max_station_error_m=0.006,
             min_station_quiet_s=0.7,

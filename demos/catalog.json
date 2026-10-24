@@ -10,10 +10,10 @@
       "simulation": "isaaclab_arena_examples.library.s1_mobile_spatula",
       "renderer": "isaaclab_arena_examples.library.render_s1_library",
       "video": "s1-library.mp4",
-      "notes": "7本棚の広い部屋で返却2冊・貸出2冊と傾斜本退避を完了。5冊の物理判定を合格。車輪接触走行、本の固定拘束なし。 [検証と比較](library-review/library-v2/README.md)。",
+      "notes": "対象位置も同じ7 mm間隔の棚で、右手が列を押して空きを作り左手で1冊返却。貸出も1冊、白タグは対象本だけ。棒状部材を除去。全43工程・118.35秒を合格。 [動画・測定](library/README.md)。",
       "view_video": "library/video.mp4",
-      "view_run": "20261023-library-v2-4books-r2",
-      "improvement_status": "図書館の改善状況：走行時間を約21%短縮。返却2冊・貸出2冊、7本棚、元のロボット材質を復元。[改善内容と測定](library-review/library-v2/README.md)。"
+      "view_run": "20261024-library-v4-packed-fast",
+      "improvement_status": "図書館の改善状況：前回163.10→118.35秒。返却・取り出し位置も7 mm間隔、白タグは取り出す本だけ、青・緑の棒状部材を除去。[動画・測定](library/README.md)。"
     },
     {
       "id": "library-s1-return",
