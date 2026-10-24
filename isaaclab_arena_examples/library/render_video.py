@@ -12,10 +12,10 @@ import json
 import math
 from pathlib import Path
 
-from isaaclab_arena_examples.bento.render_video import CudaRenderer
+from isaaclab_arena_examples.library.material_renderer import LibraryMaterialRenderer
 
 
-class LibraryRenderer(CudaRenderer):
+class LibraryRenderer(LibraryMaterialRenderer):
     """Frame either the whole library or the book handling station."""
 
     def __init__(self, scene, width, height, room=False):

@@ -49,20 +49,33 @@ def runs_dir(outputs, demo):
 def latest_run(outputs, demo):
     """Return the selected run, or None if no latest run is registered."""
     runs = runs_dir(outputs, demo)
+    selection = runs.parent / "latest.json"
+    if selection.is_file():
+        data = json.loads(selection.read_text())
+        assert data["schema_version"] == 1, "Unsupported latest selection version."
+        path = runs / identifier(data["run"])
+        assert path.resolve().parent == runs.resolve() and path.is_dir(), f"Invalid latest run: {path}"
+        return path
+    # Read old installations, but new registrations never create symlinks.
     link = runs.parent / "latest"
-    if not link.is_symlink():
-        assert not link.exists(), f"Expected latest symlink: {link}"
-        return None
-    path = link.resolve()
-    assert path.parent == runs.resolve() and path.is_dir(), f"Invalid latest link: {link}"
-    return path
+    if link.is_symlink():
+        path = link.resolve()
+        assert path.parent == runs.resolve() and path.is_dir(), f"Invalid latest link: {link}"
+        return path
+    assert not link.exists(), f"Expected a legacy latest symlink: {link}"
+    return None
 
 
 def successful(path, demo):
     """Return whether the run has a successful result and a nonempty video."""
     report = path / "result.json"
     video = path / demo["video"]
-    return report.is_file() and json.loads(report.read_text()).get("success") is True and video.is_file() and video.stat().st_size > 0
+    return (
+        report.is_file()
+        and json.loads(report.read_text()).get("success") is True
+        and video.is_file()
+        and video.stat().st_size > 0
+    )
 
 
 def register(outputs, demo, source, run_id, promote=False, note=""):
@@ -87,26 +100,90 @@ def register(outputs, demo, source, run_id, promote=False, note=""):
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, target)
     # Preserve any original manifest. Registration time does not identify simulation source revision.
-    manifest = dict(schema_version=1, demo=demo["id"], run=run_id, registered_at=datetime.now(timezone.utc).isoformat(), imported_from=str(source), note=note, source_provenance="See source_manifest.json if present; otherwise unknown.")
+    manifest = dict(
+        schema_version=1,
+        demo=demo["id"],
+        run=run_id,
+        registered_at=datetime.now(timezone.utc).isoformat(),
+        imported_from=str(source),
+        note=note,
+        source_provenance="See source_manifest.json if present; otherwise unknown.",
+    )
     (target / "registration.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     if promote:
-        link = target.parent.parent / "latest"
-        temporary = link.with_name(".latest-pending")
+        selection = target.parent.parent / "latest.json"
+        temporary = selection.with_name(".latest-pending.json")
         assert not temporary.exists() and not temporary.is_symlink(), f"Pending promotion exists: {temporary}"
-        temporary.symlink_to(Path("runs") / run_id, target_is_directory=True)
-        temporary.replace(link)
+        temporary.write_text(json.dumps(dict(schema_version=1, run=run_id), indent=2) + "\n")
+        temporary.replace(selection)
+        legacy = selection.with_name("latest")
+        if legacy.is_symlink():
+            legacy.unlink()
     return target
+
+
+def selected_video(outputs, name, demo):
+    """Return an existing video for the selected run, preferring its matching presentation copy."""
+    run = latest_run(outputs, name)
+    if run is None:
+        return None
+    if demo.get("view_video") and demo.get("view_run") == run.name:
+        view = outputs / demo["view_video"]
+        assert view.resolve().is_relative_to(outputs.resolve()), "View video escapes output root."
+        if view.is_file() and view.stat().st_size > 0:
+            return view
+    video = run / demo["video"]
+    return video if video.is_file() and video.stat().st_size > 0 else None
 
 
 def write_index(outputs, demos):
     """Generate an artifact index linking code, instructions and latest captures."""
-    lines = ["# シミュレーション一覧", "", "この一覧は `demos/manage.py index` で生成します。", "", f"[管理方法・新規デモの追加]({ROOT / 'demos/README.md'})", "", "| デモ | 状態 | コード・手順 | 最新の保存動画 |", "| --- | --- | --- | --- |"]
+    featured_name = "library-s1-mobile-spatula"
+    featured = selected_video(outputs, featured_name, demos[featured_name]) if featured_name in demos else None
+    lines = [
+        "# シミュレーション一覧",
+        "",
+        "この一覧は `demos/manage.py index` で生成します。",
+        "",
+        *([f"**最初に見るもの：[最新の図書館デモを再生]({featured.relative_to(outputs)})**"] if featured else []),
+        "",
+        "| 見たいもの | 開く場所 |",
+        "| --- | --- |",
+        "| 最新の図書館デモと代表画像・検証概要 | [図書館デモのページ](library/README.md) |",
+        "| これまでのデモ・比較実験の動画 | [過去も含めた動画一覧](previews/README.md) |",
+        "| 物理記録や過去データを再解析 | [アーカイブ一覧・復元方法](archive/README.md) |",
+        "",
+        demos.get("library-s1-mobile-spatula", {}).get(
+            "improvement_status", "図書館の改善状況：容量は軽量化済み。カクつき・動作の遅さは未改善です。"
+        ),
+        "",
+        f"[管理方法・新規デモの追加]({ROOT / 'demos/README.md'})",
+        "",
+        "| デモ | 状態 | コード・手順 | 最新の保存動画 |",
+        "| --- | --- | --- | --- |",
+    ]
     for name, demo in demos.items():
         run = latest_run(outputs, name)
-        video = f"[動画]({(run / demo['video']).relative_to(outputs)})" if run else "未登録"
-        lines.append(f"| {demo['title']} | {demo['status']} | [コード]({ROOT / demo['code']})・[手順]({ROOT / demo['readme']}) | {video} |")
+        selected = selected_video(outputs, name, demo)
+        video = f"[動画]({selected.relative_to(outputs)})" if selected else "未登録"
+        if run is None and demo.get("archive"):
+            archived = outputs / demo["archive"]
+            assert archived.resolve().is_relative_to(outputs.resolve()), "Archive escapes output root."
+            if archived.is_file():
+                video = f"[圧縮保管]({archived.relative_to(outputs)})"
+        lines.append(
+            f"| {demo['title']} | {demo['status']} | [コード]({ROOT / demo['code']})・[手順]({ROOT / demo['readme']}) |"
+            f" {video} |"
+        )
     for name, demo in demos.items():
-        lines.extend(["", f"## {demo['title']}", "", demo["notes"], "", f"実行: `{demo['simulation']}`  / 描画: `{demo['renderer']}`"])
+        lines.extend([
+            "",
+            f"## {demo['title']}",
+            "",
+            demo["notes"],
+            "",
+            f"実行: `{demo['simulation']}`  / 描画: `{demo['renderer']}`",
+        ])
         run = latest_run(outputs, name)
         if run:
             rel = run.relative_to(outputs)
@@ -116,10 +193,30 @@ def write_index(outputs, demos):
                 note = json.loads(registration.read_text()).get("note")
                 if note:
                     lines.extend(["", note])
-            for filename in ("result.json", "verification.json", "source_manifest.json", "registration.json", "return_insert.png", "loan_extract.png", "preview-last.png"):
+            for filename in (
+                "result.json",
+                "verification.json",
+                "source_manifest.json",
+                "registration.json",
+                "return_insert.png",
+                "loan_extract.png",
+                "preview-last.png",
+            ):
                 if (run / filename).is_file():
                     lines.append(f"- [{filename}]({rel / filename})")
-    lines.extend(["", "## 保存方針", "", "コード・カタログ・手順はGit管理し、動画・実測記録・モデルはGitに追加しません。", "各デモは `demos/<ID>/runs/<実行ID>/` に保存し、`latest` は確認済みの実行を指します。", "再実行は新しい実行IDで保存します。登録操作は既存の実行を上書き・削除しません。", "過去の診断と整理記録は `library-review/` にあります。", ""])
+    lines.extend([
+        "",
+        "## 保存方針",
+        "",
+        "コード・カタログ・手順はGit管理し、動画・実測記録・モデルはGitに追加しません。",
+        (
+            "各デモは `demos/<ID>/runs/<実行ID>/` に保存し、`latest.json` は確認済みの実行IDを保持します。"
+            "シンボリックリンクは新規作成しません。"
+        ),
+        "再実行は新しい実行IDで保存します。登録操作は既存の実行を上書き・削除しません。",
+        "過去の実験・旧版は [圧縮アーカイブ](archive/README.md)、調査の索引は `library-review/` にあります。",
+        "",
+    ])
     outputs.mkdir(parents=True, exist_ok=True)
     (outputs / "README.md").write_text("\n".join(lines))
 
@@ -152,7 +249,13 @@ def main():
             run = latest_run(outputs, name)
             if args.command == "check" and run:
                 assert successful(run, demo), f"Invalid latest run: {run}"
-            print(f"{name}: {demo['status']} | {run or 'no saved run'}")
+            if args.command == "check" and not run and demo.get("archive"):
+                archived = outputs / demo["archive"]
+                assert archived.resolve().is_relative_to(outputs.resolve()), "Archive escapes output root."
+                if archived.exists() or archived.is_symlink():
+                    assert archived.is_file() and archived.stat().st_size > 0, f"Invalid archive: {archived}"
+            location = str(run) if run else ("archived: " + demo["archive"] if demo.get("archive") else "no saved run")
+            print(f"{name}: {demo['status']} | {location}")
 
 
 if __name__ == "__main__":

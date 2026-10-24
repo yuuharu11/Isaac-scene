@@ -5,11 +5,10 @@
 
 """Solve S1 wrist poses from its official URDF within authored joint limits."""
 
-from pathlib import Path
+import numpy as np
 import os
 import xml.etree.ElementTree as ET
-
-import numpy as np
+from pathlib import Path
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
 
@@ -31,10 +30,16 @@ class S1Kinematics:
                 transform = np.eye(4)
                 if origin is not None:
                     transform[:3, 3] = np.fromstring(origin.get("xyz", "0 0 0"), sep=" ")
-                    transform[:3, :3] = Rotation.from_euler("xyz", np.fromstring(origin.get("rpy", "0 0 0"), sep=" ")).as_matrix()
+                    transform[:3, :3] = Rotation.from_euler(
+                        "xyz", np.fromstring(origin.get("rpy", "0 0 0"), sep=" ")
+                    ).as_matrix()
                 axis = j.find("axis")
-                chain.append((j.get("name"), j.get("type"), transform,
-                              np.fromstring(axis.get("xyz", "1 0 0"), sep=" ") if axis is not None else np.array([1., 0., 0.])))
+                chain.append((
+                    j.get("name"),
+                    j.get("type"),
+                    transform,
+                    np.fromstring(axis.get("xyz", "1 0 0"), sep=" ") if axis is not None else np.array([1.0, 0.0, 0.0]),
+                ))
                 link = j.find("parent").get("link")
             self.chains[side] = chain[::-1]
         self.goal_rotation = Rotation.from_euler("z", np.pi).as_matrix()
@@ -61,7 +66,7 @@ class S1Kinematics:
             world = world @ origin @ motion
         return world
 
-    def solve(self, side, position, lift, seed):
+    def solve(self, side, position, lift, seed, rotation=None):
         """Return bounded joint targets for a forward-facing wrist pose.
 
         Args:
@@ -69,21 +74,35 @@ class S1Kinematics:
             position: Wrist XYZ in the chassis frame, in metres.
             lift: Torso lift in metres.
             seed: Previous seven arm joint targets.
+            rotation: Optional wrist rotation matrix in the chassis frame.
 
         Returns:
             Seven joint targets and their position error in metres.
         """
         names = [f"{side}_arm_joint{i}" for i in range(1, 8)]
-        bounds = np.array([(float(self.by_name[n].find("limit").get("lower")) + 0.01,
-                            float(self.by_name[n].find("limit").get("upper")) - 0.01) for n in names]).T
+        bounds = np.array([
+            (
+                float(self.by_name[n].find("limit").get("lower")) + 0.01,
+                float(self.by_name[n].find("limit").get("upper")) - 0.01,
+            )
+            for n in names
+        ]).T
         seed = np.asarray(seed)
+        goal_rotation = self.goal_rotation if rotation is None else np.asarray(rotation)
+
         def residual(q):
             pose = self.forward(side, q, lift)
-            return np.r_[10 * (pose[:3, 3] - position),
-                         Rotation.from_matrix(self.goal_rotation.T @ pose[:3, :3]).as_rotvec(), 0.002 * (q - seed)]
+            return np.r_[
+                10 * (pose[:3, 3] - position),
+                Rotation.from_matrix(goal_rotation.T @ pose[:3, :3]).as_rotvec(),
+                0.002 * (q - seed),
+            ]
+
         result = least_squares(residual, np.clip(seed, *bounds), bounds=tuple(bounds), max_nfev=150)
         pose = self.forward(side, result.x, lift)
         error = float(np.linalg.norm(pose[:3, 3] - position))
-        angle = float(Rotation.from_matrix(self.goal_rotation.T @ pose[:3, :3]).magnitude())
-        assert error < 0.006 and angle < 0.04, f"Unreachable {side} wrist: {position}, errors={error:.4f}m/{angle:.3f}rad"
+        angle = float(Rotation.from_matrix(goal_rotation.T @ pose[:3, :3]).magnitude())
+        assert (
+            error < 0.006 and angle < 0.04
+        ), f"Unreachable {side} wrist: {position}, errors={error:.4f}m/{angle:.3f}rad"
         return result.x, error

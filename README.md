@@ -4,6 +4,13 @@ Isaac Lab-Arena を土台に、Galbot S1 や Yaskawa NHC12 を使った操作デ
 開発用リポジトリです。上流（isaac-sim/IsaacLab-Arena）の公式リポジトリでは
 ありません。
 
+## デモを見る
+
+まずは [最新の図書館デモを再生](outputs/library/video.mp4) してください。
+[図書館の画像・検証概要](outputs/library/README.md) ／ [これまでの動画一覧](outputs/previews/README.md) ／ [全体一覧と実行コード](outputs/README.md)。
+
+図書館動画は軽量化済みです。動作のカクつきと遅さはまだ改善していません。
+
 ## 土台
 
 | 項目 | 内容 |
@@ -23,11 +30,12 @@ Isaac Lab-Arena を土台に、Galbot S1 や Yaskawa NHC12 を使った操作デ
 
 上流に、次の独立したサンプルを追加しています。いずれも Arena の環境
 レジストリには登録しておらず、学習済みポリシーは使いません。
-物理は CPU PhysX、把持は理想的な固定拘束による近似です。
+物理は CPU PhysX です。S1の2枚コテ版は接触・摩擦で保持します。旧デモの把持には理想的な固定拘束の近似が残っています。
 
 | サンプル | 内容 | 説明 |
 |---|---|---|
-| 図書館（Galbot S1・双腕五指） | 返却本の収納と高い棚からの貸出 | [S1 の README](isaaclab_arena_examples/library/README.md) |
+| 図書館（Galbot S1・2枚コテ） | 広い図書館で車輪移動し、返却ボックス→棚→貸出ボックスを接触把持で操作 | [S1 の README](isaaclab_arena_examples/library/README.md) |
+| 図書館（旧S1・双腕五指） | 理想把持による返却・高い棚からの貸出の参考 | [旧五指版](isaaclab_arena_examples/library/SVH_REFERENCE.md) |
 | 弁当盛り付け | NHC12 単腕が4品目を弁当箱の区画へ移す | [bento の README](isaaclab_arena_examples/bento/README.md) |
 | 図書館（単腕・移動） | 返却本の収納と依頼本の貸出 | [旧NHC12版の手順](isaaclab_arena_examples/library/HISTORY.md) |
 | 図書館（固定・双腕） | 隣接本を押して隙間を広げる密集棚の試作 | 同上 |
