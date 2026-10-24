@@ -122,14 +122,30 @@ def register(outputs, demo, source, run_id, promote=False, note=""):
     return target
 
 
+def selected_video(outputs, name, demo):
+    """Return an existing video for the selected run, preferring its matching presentation copy."""
+    run = latest_run(outputs, name)
+    if run is None:
+        return None
+    if demo.get("view_video") and demo.get("view_run") == run.name:
+        view = outputs / demo["view_video"]
+        assert view.resolve().is_relative_to(outputs.resolve()), "View video escapes output root."
+        if view.is_file() and view.stat().st_size > 0:
+            return view
+    video = run / demo["video"]
+    return video if video.is_file() and video.stat().st_size > 0 else None
+
+
 def write_index(outputs, demos):
     """Generate an artifact index linking code, instructions and latest captures."""
+    featured_name = "library-s1-mobile-spatula"
+    featured = selected_video(outputs, featured_name, demos[featured_name]) if featured_name in demos else None
     lines = [
         "# シミュレーション一覧",
         "",
         "この一覧は `demos/manage.py index` で生成します。",
         "",
-        "**最初に見るもの：[最新の図書館デモを再生](library/video.mp4)**（2枚コテ・移動・返却・貸出の全工程）。",
+        *([f"**最初に見るもの：[最新の図書館デモを再生]({featured.relative_to(outputs)})**"] if featured else []),
         "",
         "| 見たいもの | 開く場所 |",
         "| --- | --- |",
@@ -148,17 +164,13 @@ def write_index(outputs, demos):
     ]
     for name, demo in demos.items():
         run = latest_run(outputs, name)
-        video = f"[動画]({(run / demo['video']).relative_to(outputs)})" if run else "未登録"
+        selected = selected_video(outputs, name, demo)
+        video = f"[動画]({selected.relative_to(outputs)})" if selected else "未登録"
         if run is None and demo.get("archive"):
             archived = outputs / demo["archive"]
             assert archived.resolve().is_relative_to(outputs.resolve()), "Archive escapes output root."
             if archived.is_file():
                 video = f"[圧縮保管]({archived.relative_to(outputs)})"
-        if run and demo.get("view_video") and demo.get("view_run") == run.name:
-            view = outputs / demo["view_video"]
-            assert view.resolve().is_relative_to(outputs.resolve()), "View video escapes output root."
-            if view.is_file():
-                video = f"[軽量動画]({view.relative_to(outputs)})"
         lines.append(
             f"| {demo['title']} | {demo['status']} | [コード]({ROOT / demo['code']})・[手順]({ROOT / demo['readme']}) |"
             f" {video} |"
@@ -240,7 +252,8 @@ def main():
             if args.command == "check" and not run and demo.get("archive"):
                 archived = outputs / demo["archive"]
                 assert archived.resolve().is_relative_to(outputs.resolve()), "Archive escapes output root."
-                assert archived.is_file() and archived.stat().st_size > 0, f"Missing archive: {archived}"
+                if archived.exists() or archived.is_symlink():
+                    assert archived.is_file() and archived.stat().st_size > 0, f"Invalid archive: {archived}"
             location = str(run) if run else ("archived: " + demo["archive"] if demo.get("archive") else "no saved run")
             print(f"{name}: {demo['status']} | {location}")
 

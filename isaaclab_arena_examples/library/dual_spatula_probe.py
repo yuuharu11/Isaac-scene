@@ -766,7 +766,8 @@ def run(args):
                 goal = case["segment_start"] * (1 - f) + case["goal"] * f
                 rotation = case["slerp"](f)
                 force = 900 * (goal - root[:3]) - 30 * velocity[:3]
-                force[2] += 0.42 * 9.81
+                if args.gravity_compensation and driver is None:
+                    force[2] += 0.42 * 9.81
                 force *= min(1, 30 / max(np.linalg.norm(force), 1e-12))
                 torque = 8 * (rotation * Rotation.from_quat(root[3:]).inv()).as_rotvec() - 0.3 * velocity[3:]
                 if args.gravity_compensation and driver is None:
